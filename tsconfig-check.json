@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@config/*": ["src/config/*"],
+      "@modules/*": ["src/modules/*"],
+      "@shared/*": ["src/shared/*"],
+      "@middlewares/*": ["src/middlewares/*"],
+      "@constants/*": ["src/constants/*"],
+      "@ai/*": ["src/ai/*"],
+      "@queues/*": ["src/queues/*"]
+    }
+  },
+  "include": ["src/modules/chatbot/repositories/chatbot.repository.ts", "src/config/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

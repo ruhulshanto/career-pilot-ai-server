@@ -1,0 +1,25 @@
+.env
+.env.local
+.env.development
+.env.production
+
+# Runtime directories
+node_modules/
+dist/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dependency directories
+.pnp/
+.pnp.js
+
+# Editor directories
+.vscode/
+.idea/
+
+# Build output
+coverage/

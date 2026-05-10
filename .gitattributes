@@ -1,0 +1,16 @@
+# Normalize line endings and avoid LF/CRLF warnings
+* text=auto
+
+# Explicitly declare text files you want normalized
+*.js text
+*.jsx text
+*.ts text
+*.tsx text
+*.json text
+*.css text
+*.scss text
+*.html text
+*.md text
+*.yml text
+*.yaml text
+*.gitignore text
