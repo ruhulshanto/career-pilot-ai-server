@@ -1,11 +1,36 @@
 import { prisma } from '@config/prisma.js';
 
+const authUserSelect = {
+  id: true,
+  email: true,
+  passwordHash: true,
+  role: true,
+  emailVerifiedAt: true,
+  username: true,
+  firstName: true,
+  lastName: true,
+  avatarUrl: true,
+  headline: true,
+  location: true,
+  isDemo: true,
+  isActive: true,
+  deletedAt: true,
+  createdAt: true,
+  updatedAt: true
+};
+
 export const authRepository = {
   findUserByEmail(email: string) {
-    return prisma.user.findUnique({ where: { email } });
+    return prisma.user.findUnique({
+      where: { email },
+      select: authUserSelect
+    });
   },
   findUserByUsername(username: string) {
-    return prisma.user.findUnique({ where: { username } });
+    return prisma.user.findUnique({
+      where: { username },
+      select: { id: true }
+    });
   },
   findActiveUserById(id: string) {
     return prisma.user.findFirst({
@@ -13,6 +38,7 @@ export const authRepository = {
       select: {
         id: true,
         email: true,
+        emailVerifiedAt: true,
         username: true,
         firstName: true,
         lastName: true,
@@ -20,6 +46,7 @@ export const authRepository = {
         avatarUrl: true,
         headline: true,
         location: true,
+        isDemo: true,
         createdAt: true,
         updatedAt: true
       }
@@ -38,9 +65,133 @@ export const authRepository = {
     email: string; 
     passwordHash: string 
   }) {
-    return prisma.user.create({ data });
+    return prisma.user.create({
+      data,
+      select: authUserSelect
+    });
   },
-  createRefreshToken(data: { userId: string; token: string; expiresAt: Date }) {
+  async findDemoUserByRole(role: 'USER' | 'ADMIN' | 'COACH' | 'MENTOR') {
+    const baseWhere = {
+      isDemo: true,
+      isActive: true,
+      deletedAt: null
+    };
+
+    const user =
+      role === 'MENTOR'
+        ? await prisma.user.findFirst({
+            where: {
+              role,
+              ...baseWhere
+            },
+            select: authUserSelect
+          }).catch(() => null)
+        : await prisma.user.findFirst({
+            where: {
+              role,
+              ...baseWhere
+            },
+            select: authUserSelect
+          });
+
+    if (user || (role !== 'MENTOR' && role !== 'COACH')) {
+      return user;
+    }
+
+    const fallbackRole = role === 'MENTOR' ? 'COACH' : 'MENTOR';
+
+    return prisma.user.findFirst({
+      where: {
+        role: fallbackRole,
+        ...baseWhere
+      },
+      select: authUserSelect
+    });
+  },
+  markEmailVerified(userId: string) {
+    return prisma.user.update({
+      where: { id: userId },
+      data: { emailVerifiedAt: new Date() }
+    });
+  },
+  updatePassword(userId: string, passwordHash: string) {
+    return prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash }
+    });
+  },
+  createSession(data: {
+    userId: string;
+    userAgent?: string;
+    ipAddress?: string;
+    expiresAt: Date;
+  }) {
+    return prisma.accountSession.create({ data });
+  },
+  touchSession(id: string) {
+    return prisma.accountSession.update({
+      where: { id },
+      data: { lastSeenAt: new Date() }
+    });
+  },
+  getActiveSessions(userId: string) {
+    return prisma.accountSession.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() }
+      },
+      orderBy: { lastSeenAt: 'desc' },
+      select: {
+        id: true,
+        userAgent: true,
+        ipAddress: true,
+        lastSeenAt: true,
+        expiresAt: true,
+        createdAt: true
+      }
+    });
+  },
+  findSession(id: string, userId: string) {
+    return prisma.accountSession.findFirst({
+      where: { id, userId, revokedAt: null, expiresAt: { gt: new Date() } }
+    });
+  },
+  revokeSession(id: string, userId: string) {
+    const revokedAt = new Date();
+    return prisma.$transaction([
+      prisma.accountSession.updateMany({
+        where: { id, userId, revokedAt: null },
+        data: { revokedAt }
+      }),
+      prisma.refreshToken.updateMany({
+        where: { sessionId: id, userId, revokedAt: null },
+        data: { revokedAt }
+      })
+    ]);
+  },
+  revokeOtherSessions(userId: string, currentSessionId?: string) {
+    const revokedAt = new Date();
+    return prisma.$transaction([
+      prisma.accountSession.updateMany({
+        where: {
+          userId,
+          revokedAt: null,
+          ...(currentSessionId ? { id: { not: currentSessionId } } : {})
+        },
+        data: { revokedAt }
+      }),
+      prisma.refreshToken.updateMany({
+        where: {
+          userId,
+          revokedAt: null,
+          ...(currentSessionId ? { sessionId: { not: currentSessionId } } : {})
+        },
+        data: { revokedAt }
+      })
+    ]);
+  },
+  createRefreshToken(data: { userId: string; sessionId?: string; token: string; expiresAt: Date }) {
     return prisma.refreshToken.create({ data });
   },
   findValidRefreshToken(token: string) {
@@ -51,7 +202,10 @@ export const authRepository = {
         expiresAt: { gt: new Date() }
       },
       include: {
-        user: true
+        user: {
+          select: authUserSelect
+        },
+        session: true
       }
     });
   },
@@ -65,6 +219,62 @@ export const authRepository = {
     return prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() }
+    });
+  },
+  deleteOpenEmailVerificationTokens(userId: string) {
+    return prisma.emailVerificationToken.deleteMany({
+      where: { userId, usedAt: null }
+    });
+  },
+  createEmailVerificationToken(data: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }) {
+    return prisma.emailVerificationToken.create({ data });
+  },
+  findValidEmailVerificationToken(tokenHash: string) {
+    return prisma.emailVerificationToken.findFirst({
+      where: {
+        tokenHash,
+        usedAt: null,
+        expiresAt: { gt: new Date() }
+      },
+      include: { user: true }
+    });
+  },
+  markEmailVerificationTokenUsed(id: string) {
+    return prisma.emailVerificationToken.update({
+      where: { id },
+      data: { usedAt: new Date() }
+    });
+  },
+  deleteOpenPasswordResetTokens(userId: string) {
+    return prisma.passwordResetToken.deleteMany({
+      where: { userId, usedAt: null }
+    });
+  },
+  createPasswordResetToken(data: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }) {
+    return prisma.passwordResetToken.create({ data });
+  },
+  findValidPasswordResetToken(tokenHash: string) {
+    return prisma.passwordResetToken.findFirst({
+      where: {
+        tokenHash,
+        usedAt: null,
+        expiresAt: { gt: new Date() }
+      },
+      include: { user: true }
+    });
+  },
+  markPasswordResetTokenUsed(id: string) {
+    return prisma.passwordResetToken.update({
+      where: { id },
+      data: { usedAt: new Date() }
     });
   }
 };

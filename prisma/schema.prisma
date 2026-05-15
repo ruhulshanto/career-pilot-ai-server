@@ -12,9 +12,33 @@ model User {
   email              String              @unique
   passwordHash       String
   role               UserRole            @default(USER)
+  emailVerifiedAt    DateTime?
   avatarUrl          String?
   headline           String?
+  bio                String?
+  targetRole         String?
   location           String?
+  phoneNumber        String?
+  showEmail          Boolean             @default(false)
+  currentCompany     String?
+  currentPosition    String?
+  yearsExperience    Int?
+  education          Json?
+  profileSkills      Json?
+  profileCertifications Json?
+  profileProjects    Json?
+  preferredJobType   String?
+  preferredWorkMode  String?
+  preferredSalaryRange String?
+  languages          Json?
+  experienceSummary  String?
+  mentorSpecialties  Json?
+  mentorExpertise    Json?
+  mentorRating       Float?
+  mentorCompletedReviews Int               @default(0)
+  socialLinks        Json?
+  isPublicProfile    Boolean             @default(false)
+  isDemo             Boolean             @default(false)
   isActive           Boolean             @default(true)
   lastLoginAt        DateTime?
   createdAt          DateTime            @default(now())
@@ -27,13 +51,28 @@ model User {
   analyticsEvents    AnalyticsEvent[]
   careerRoadmaps     CareerRoadmap[]
   chatbotSessions    ChatbotSession[]
+  interviewerAvailability InterviewerAvailability[] @relation("InterviewerAvailabilityOwner")
   interviewSessions  InterviewSession[]
+  jobApplications     JobApplication[]
+  careerGoals         CareerGoal[]
   jobRecommendations JobRecommendation[]
   notifications      Notification[]
+  mentorAssignmentsAsMentor MentorAssignment[] @relation("MentorAssignmentsAsMentor")
+  mentorAssignmentsAsUser   MentorAssignment[] @relation("MentorAssignmentsAsUser")
+  mentorReviewsAsMentor     MentorReview[]     @relation("MentorReviewsAsMentor")
+  mentorReviewsAsUser       MentorReview[]     @relation("MentorReviewsAsUser")
+  mentorComments            MentorComment[]
+  mentorSessionsAsMentor    MentorSession[]    @relation("MentorSessionsAsMentor")
+  mentorSessionsAsUser      MentorSession[]    @relation("MentorSessionsAsUser")
+  onboardingProgress OnboardingProgress?
+  accountSessions    AccountSession[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens PasswordResetToken[]
   refreshTokens      RefreshToken[]
   resumes            Resume[]
 
   @@index([role, isActive])
+  @@index([isDemo])
   @@index([deletedAt])
   @@map("users")
 }
@@ -41,15 +80,60 @@ model User {
 model RefreshToken {
   id        String    @id @default(cuid())
   userId    String
+  sessionId String?
   token     String    @unique
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
+  session   AccountSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+  @@index([sessionId])
   @@index([revokedAt])
   @@map("refresh_tokens")
+}
+
+model AccountSession {
+  id             String         @id @default(cuid())
+  userId         String
+  userAgent      String?
+  ipAddress      String?
+  lastSeenAt     DateTime       @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  refreshTokens  RefreshToken[]
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@map("account_sessions")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("password_reset_tokens")
 }
 
 model Resume {
@@ -75,6 +159,7 @@ model Resume {
 model InterviewSession {
   id          String          @id @default(cuid())
   userId      String
+  availabilityId String?
   title       String
   roleTarget  String
   level       String?
@@ -89,12 +174,36 @@ model InterviewSession {
   updatedAt   DateTime        @updatedAt
   deletedAt   DateTime?
   aiFeedbacks AiFeedback[]
+  availability InterviewerAvailability? @relation(fields: [availabilityId], references: [id], onDelete: SetNull)
   user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, scheduledAt])
+  @@index([availabilityId])
   @@index([roleTarget])
   @@index([deletedAt])
   @@map("interview_sessions")
+}
+
+model InterviewerAvailability {
+  id          String    @id @default(cuid())
+  interviewerId String?
+  roleTarget  String
+  level       String   @default("General")
+  startsAt    DateTime
+  endsAt      DateTime
+  capacity    Int       @default(1)
+  bookedCount Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  interviewer User?     @relation("InterviewerAvailabilityOwner", fields: [interviewerId], references: [id], onDelete: SetNull)
+  interviewSessions InterviewSession[]
+
+  @@unique([roleTarget, level, startsAt, endsAt])
+  @@index([roleTarget, level, startsAt])
+  @@index([interviewerId, startsAt])
+  @@index([isActive, startsAt])
+  @@map("interviewer_availability")
 }
 
 model AiFeedback {
@@ -134,24 +243,123 @@ model AiFeedback {
 }
 
 model CareerRoadmap {
-  id           String           @id @default(cuid())
-  userId       String
-  targetRole   String
-  currentLevel String
-  status       ProcessingStatus @default(PENDING)
-  milestones   Json
-  skills       Json?
-  timeline     Json?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  deletedAt    DateTime?
-  aiFeedbacks  AiFeedback[]
-  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                      String             @id @default(cuid())
+  userId                  String
+  targetRole              String
+  currentLevel            String
+  preferredPath           String?
+  title                   String?
+  summary                 String?
+  estimatedDurationMonths Int?
+  progress                Float              @default(0)
+  version                 Int                @default(1)
+  sourceResumeId          String?
+  regeneratedFromId       String?
+  status                  ProcessingStatus   @default(PENDING)
+  milestones              Json
+  skills                  Json?
+  timeline                Json?
+  projects                Json?
+  certifications          Json?
+  learningRecommendations Json?
+  failureReason           String?
+  completedAt             DateTime?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  deletedAt               DateTime?
+  aiFeedbacks             AiFeedback[]
+  learningGoals           LearningGoal[]
+  milestoneRecords        RoadmapMilestone[]
+  projectRecords          RoadmapProject[]
+  skillRecords            RoadmapSkill[]
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([targetRole])
+  @@index([sourceResumeId])
+  @@index([regeneratedFromId])
   @@index([deletedAt])
   @@map("career_roadmaps")
+}
+
+model RoadmapMilestone {
+  id              String                 @id @default(cuid())
+  roadmapId       String
+  sequence        Int
+  title           String
+  description     String
+  durationWeeks   Int?
+  dueDate         DateTime?
+  status          RoadmapMilestoneStatus @default(PENDING)
+  progress        Float                  @default(0)
+  requiredSkills  Json?
+  resources       Json?
+  projectIdeas    Json?
+  successCriteria Json?
+  completedAt     DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  roadmap         CareerRoadmap          @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+
+  @@index([roadmapId, sequence])
+  @@index([roadmapId, status])
+  @@map("roadmap_milestones")
+}
+
+model RoadmapSkill {
+  id            String             @id @default(cuid())
+  roadmapId     String
+  name          String
+  category      String?
+  currentLevel  String?
+  targetLevel   String
+  priority      String
+  progress      Float              @default(0)
+  status        RoadmapSkillStatus @default(NOT_STARTED)
+  evidence      Json?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  roadmap       CareerRoadmap      @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+
+  @@unique([roadmapId, name])
+  @@index([roadmapId, status])
+  @@map("roadmap_skills")
+}
+
+model RoadmapProject {
+  id                 String        @id @default(cuid())
+  roadmapId          String
+  title              String
+  description        String
+  difficulty         String?
+  estimatedWeeks     Int?
+  technologies       Json?
+  skillsDemonstrated Json?
+  portfolioValue     String?
+  status             ProjectStatus @default(PLANNED)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  roadmap            CareerRoadmap @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+
+  @@index([roadmapId, status])
+  @@map("roadmap_projects")
+}
+
+model LearningGoal {
+  id          String             @id @default(cuid())
+  roadmapId   String
+  title       String
+  description String
+  targetDate  DateTime?
+  status      LearningGoalStatus @default(PENDING)
+  progress    Float              @default(0)
+  resources   Json?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  roadmap     CareerRoadmap      @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+
+  @@index([roadmapId, status])
+  @@map("learning_goals")
 }
 
 model ChatbotSession {
@@ -202,6 +410,7 @@ model JobRecommendation {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
+  applications JobApplication[]
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([source, externalId])
@@ -212,6 +421,43 @@ model JobRecommendation {
   @@map("job_recommendations")
 }
 
+model JobApplication {
+  id                  String               @id @default(cuid())
+  userId              String
+  jobRecommendationId String
+  status              JobApplicationStatus @default(SAVED)
+  notes               String?
+  appliedAt           DateTime?
+  interviewAt         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  jobRecommendation   JobRecommendation    @relation(fields: [jobRecommendationId], references: [id], onDelete: Cascade)
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobRecommendationId])
+  @@index([userId, status, updatedAt])
+  @@map("job_applications")
+}
+
+model CareerGoal {
+  id          String           @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  targetRole  String?
+  targetDate  DateTime?
+  status      CareerGoalStatus @default(ACTIVE)
+  progress    Float            @default(0)
+  nextSteps   Json?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  completedAt DateTime?
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, updatedAt])
+  @@map("career_goals")
+}
+
 model Notification {
   id        String             @id @default(cuid())
   userId    String
@@ -219,16 +465,124 @@ model Notification {
   status    NotificationStatus @default(UNREAD)
   title     String
   message   String
+  actionLink String?
   metadata  Json?
+  dedupeKey String?
   readAt    DateTime?
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
   deletedAt DateTime?
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, dedupeKey])
   @@index([userId, type, status, createdAt])
   @@index([deletedAt])
   @@map("notifications")
+}
+
+model MentorAssignment {
+  id         String                 @id @default(cuid())
+  mentorId   String
+  userId     String
+  status     MentorAssignmentStatus @default(ACTIVE)
+  assignedAt DateTime               @default(now())
+  endedAt    DateTime?
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+  mentor     User                   @relation("MentorAssignmentsAsMentor", fields: [mentorId], references: [id], onDelete: Cascade)
+  user       User                   @relation("MentorAssignmentsAsUser", fields: [userId], references: [id], onDelete: Cascade)
+  reviews    MentorReview[]
+
+  @@index([mentorId, status])
+  @@index([userId, status])
+  @@map("mentor_assignments")
+}
+
+model MentorReview {
+  id             String             @id @default(cuid())
+  userId         String
+  mentorId       String?
+  assignmentId   String?
+  type           MentorReviewType
+  status         MentorReviewStatus @default(PENDING)
+  title          String
+  message        String?
+  entityType     String?
+  entityId       String?
+  score          Float?
+  verdict        String?
+  suggestedEdits Json?
+  completedAt    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  user           User               @relation("MentorReviewsAsUser", fields: [userId], references: [id], onDelete: Cascade)
+  mentor         User?              @relation("MentorReviewsAsMentor", fields: [mentorId], references: [id], onDelete: SetNull)
+  assignment     MentorAssignment?  @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  comments       MentorComment[]
+  sessions       MentorSession[]
+
+  @@index([userId, status, createdAt])
+  @@index([mentorId, status, createdAt])
+  @@index([type, status])
+  @@index([entityType, entityId])
+  @@map("mentor_reviews")
+}
+
+model MentorComment {
+  id         String                  @id @default(cuid())
+  reviewId   String
+  authorId   String
+  parentId   String?
+  body       String
+  visibility MentorCommentVisibility @default(USER_AND_MENTOR)
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+  review     MentorReview            @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  author     User                    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent     MentorComment?          @relation("MentorCommentThread", fields: [parentId], references: [id], onDelete: SetNull)
+  replies    MentorComment[]         @relation("MentorCommentThread")
+
+  @@index([reviewId, createdAt])
+  @@index([authorId, createdAt])
+  @@index([parentId])
+  @@map("mentor_comments")
+}
+
+model MentorSession {
+  id              String              @id @default(cuid())
+  userId          String
+  mentorId        String?
+  reviewId        String?
+  status          MentorSessionStatus @default(REQUESTED)
+  topic           String
+  message         String?
+  scheduledAt     DateTime?
+  durationMinutes Int                 @default(30)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  user            User                @relation("MentorSessionsAsUser", fields: [userId], references: [id], onDelete: Cascade)
+  mentor          User?               @relation("MentorSessionsAsMentor", fields: [mentorId], references: [id], onDelete: SetNull)
+  review          MentorReview?       @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, scheduledAt])
+  @@index([mentorId, status, scheduledAt])
+  @@map("mentor_sessions")
+}
+
+model OnboardingProgress {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  completedSteps Json      @default("[]")
+  currentStep    String?
+  skippedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([completedAt])
+  @@index([skippedAt])
+  @@map("onboarding_progress")
 }
 
 model AnalyticsEvent {
@@ -254,12 +608,12 @@ model AnalyticsEvent {
 enum UserRole {
   USER
   ADMIN
+  COACH
   MENTOR
 }
 
 enum AiProvider {
-  OPENAI
-  GEMINI
+  GROQ
 }
 
 enum ProcessingStatus {
@@ -272,6 +626,7 @@ enum ProcessingStatus {
 enum InterviewStatus {
   SCHEDULED
   ACTIVE
+  IN_PROGRESS
   COMPLETED
   CANCELLED
 }
@@ -281,11 +636,93 @@ enum NotificationType {
   EMAIL
   IN_APP
   REMINDER
+  INTERVIEW_REMINDER
+  ROADMAP_REMINDER
+  JOB_MATCH
+  CAREER_GOAL
+  INTERVIEW_FEEDBACK
 }
 
 enum NotificationStatus {
   UNREAD
   READ
+  ARCHIVED
+}
+
+enum MentorAssignmentStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum MentorReviewType {
+  ROADMAP
+  RESUME
+  INTERVIEW
+  MILESTONE
+  GENERAL
+}
+
+enum MentorReviewStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  CHANGES_REQUESTED
+  COMPLETED
+  REJECTED
+}
+
+enum MentorCommentVisibility {
+  USER_AND_MENTOR
+  MENTOR_ONLY
+}
+
+enum MentorSessionStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum RoadmapMilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum RoadmapSkillStatus {
+  NOT_STARTED
+  LEARNING
+  PRACTICING
+  PROFICIENT
+}
+
+enum ProjectStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum LearningGoalStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum JobApplicationStatus {
+  SAVED
+  APPLIED
+  INTERVIEW_SCHEDULED
+  OFFER
+  REJECTED
+  WITHDRAWN
+}
+
+enum CareerGoalStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
   ARCHIVED
 }
 

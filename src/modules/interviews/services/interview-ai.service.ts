@@ -1,6 +1,5 @@
 import { BaseAiService } from '@ai/services/base.js';
-import { AiModel } from '@ai/types.js';
-import { env } from '@config/env.js';
+import { getDefaultAiModel } from '@config/ai.js';
 import { z } from 'zod';
 import { logger } from '@/logging/logger.js';
 
@@ -19,19 +18,37 @@ const InterviewFeedbackSchema = z.object({
   strengths: z.array(z.string()),
   weaknesses: z.array(z.string()),
   suggestions: z.array(z.string()),
+  questionFeedback: z
+    .array(
+      z.object({
+        questionId: z.string(),
+        score: z.number().min(0).max(100),
+        whatWorked: z.array(z.string()),
+        improve: z.array(z.string()),
+        strongerAnswer: z.string()
+      })
+    )
+    .optional(),
   score: z.number().min(0).max(100)
 });
 
 export type InterviewQuestionPayload = z.infer<typeof InterviewQuestionSchema>;
 export type InterviewFeedbackPayload = z.infer<typeof InterviewFeedbackSchema>;
 
-const defaultModel: AiModel = env.OPENAI_API_KEY
-  ? { provider: 'openai', model: 'gpt-4', temperature: 0.7 }
-  : { provider: 'gemini', model: 'gemini-pro', temperature: 0.7 };
+const MAX_QUESTION_COUNT = 12;
+const MAX_ANSWER_CHARS = 1200;
+const MAX_TRANSCRIPT_CHARS = 2500;
+
+const truncateText = (value: string | undefined, maxChars: number) => {
+  if (!value) return '';
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars).trim()}...`;
+};
 
 export class InterviewAiService extends BaseAiService {
   constructor() {
-    super(defaultModel);
+    super(getDefaultAiModel('interview', { temperature: 0.7 }));
   }
 
   async generateInterviewQuestions(
@@ -41,18 +58,22 @@ export class InterviewAiService extends BaseAiService {
     questionCount: number
   ): Promise<InterviewQuestionPayload[]> {
     try {
+      const normalizedQuestionCount = Math.min(
+        MAX_QUESTION_COUNT,
+        Math.max(1, questionCount)
+      );
       const response = await this.executePromptWithSchema(
         'interview-question-generation',
         {
           title,
           roleTarget,
           level: level ?? 'general',
-          questionCount
+          questionCount: normalizedQuestionCount
         },
         InterviewQuestionsSchema
       );
 
-      return response.questions;
+      return response.questions.slice(0, normalizedQuestionCount);
     } catch (error) {
       logger.warn(
         { error, title, roleTarget },
@@ -62,7 +83,7 @@ export class InterviewAiService extends BaseAiService {
         title,
         roleTarget,
         level,
-        questionCount
+        Math.min(MAX_QUESTION_COUNT, Math.max(1, questionCount))
       );
     }
   }
@@ -78,7 +99,10 @@ export class InterviewAiService extends BaseAiService {
       const questionAnswerPairs = questions
         .map(
           (question) =>
-            `Question: ${question.prompt}\nAnswer: ${question.answer ?? 'No answer provided'}`
+            `Question: ${question.prompt}\nAnswer: ${
+              truncateText(question.answer, MAX_ANSWER_CHARS) ||
+              'No answer provided'
+            }`
         )
         .join('\n\n');
 
@@ -88,7 +112,10 @@ export class InterviewAiService extends BaseAiService {
           title,
           roleTarget,
           level: level ?? 'general',
-          questionAnswerPairs: `${questionAnswerPairs}\n\nTranscript:\n${transcript}`
+          questionAnswerPairs: `${questionAnswerPairs}\n\nTranscript:\n${truncateText(
+            transcript,
+            MAX_TRANSCRIPT_CHARS
+          )}`
         },
         InterviewFeedbackSchema
       );
@@ -126,8 +153,8 @@ export class InterviewAiService extends BaseAiService {
     const detailScore = Math.min(100, Math.max(30, answered.length * 15));
     return {
       summary: answered.length
-        ? 'The candidate provided thoughtful responses and demonstrated an understanding of the role.'
-        : 'The candidate needs to provide more complete answers before the interview can be evaluated.',
+        ? 'The AI service is currently experiencing high demand, so CareerAI created a basic practice review from your answers. The candidate provided thoughtful responses and demonstrated an understanding of the role.'
+        : 'The AI service is currently experiencing high demand, so CareerAI created a basic practice review. The candidate needs to provide more complete answers before the interview can be evaluated.',
       strengths: answered.length
         ? [
             'Clear response structure',
@@ -147,6 +174,20 @@ export class InterviewAiService extends BaseAiService {
         'Quantify your accomplishments where possible.',
         'Practice clear structure: situation, task, action, result.'
       ],
+      questionFeedback: questions.map((question, index) => ({
+        questionId: question.questionId,
+        score: question.answer?.trim() ? Math.min(85, 55 + index * 4) : 35,
+        whatWorked: question.answer?.trim()
+          ? ['The answer addresses the question directly.']
+          : ['The question was included in the practice set.'],
+        improve: [
+          'Add a specific situation, action, and measurable result.',
+          'Connect the example more clearly to the target role.'
+        ],
+        strongerAnswer: question.answer?.trim()
+          ? 'Rewrite this answer with one concrete example, the action you personally took, and the business or team impact.'
+          : 'Prepare a complete answer using the STAR structure before your next attempt.'
+      })),
       score: detailScore
     };
   }

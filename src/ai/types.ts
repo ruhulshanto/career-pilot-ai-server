@@ -1,4 +1,4 @@
-export type AiProviderName = 'openai' | 'gemini';
+export type AiProviderName = 'groq' | 'chatbot-groq';
 
 export type AiModel = {
   provider: AiProviderName;
@@ -18,6 +18,7 @@ export type AiCompletionRequest = {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: 'json' | 'text';
+  signal?: AbortSignal;
 };
 
 export type AiCompletionResponse = {

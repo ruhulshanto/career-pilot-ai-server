@@ -1,6 +1,10 @@
 import { BaseAiService } from '@ai/services/base.js';
-import { AiModel, AiResponseParser } from '@ai/index.js';
-import { env } from '@config/env.js';
+import { AI_SERVICE_UNAVAILABLE_MESSAGE } from '@ai/clients/ai-client.js';
+import {
+  getConfiguredPrismaAiProvider,
+  getDefaultAiModel
+} from '@config/ai.js';
+import { ApiError } from '@shared/errors/api-error.js';
 import { z } from 'zod';
 import { logger } from '@/logging/logger.js';
 import type {
@@ -11,15 +15,169 @@ import type {
 
 const ChatbotResponseSchema = z.object({
   response: z.string(),
+  summary: z.string().optional(),
+  nextActions: z.array(z.string()).optional(),
+  questions: z.array(z.string()).optional(),
+  resources: z.array(z.string()).optional(),
+  timeline: z.array(z.string()).optional(),
   reasoning: z.string().optional(),
   confidence: z.number().min(0).max(1).optional()
 });
 
-type ChatbotResponsePayload_Schema = z.infer<typeof ChatbotResponseSchema>;
+const CHATBOT_RESPONSE_MAX_TOKENS = 700;
 
-const defaultModel: AiModel = env.OPENAI_API_KEY
-  ? { provider: 'openai', model: 'gpt-4', temperature: 0.7 }
-  : { provider: 'gemini', model: 'gemini-pro', temperature: 0.7 };
+const truncateText = (value: unknown, maxLength: number) => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > maxLength
+    ? `${trimmed.slice(0, maxLength).trim()}...`
+    : trimmed;
+};
+
+const stringList = (value: unknown, maxItems = 3) =>
+  Array.isArray(value)
+    ? value
+        .filter(
+          (item): item is string =>
+            typeof item === 'string' && Boolean(item.trim())
+        )
+        .slice(0, maxItems)
+    : [];
+
+const summarizeRecentMessages = (messages: ChatbotContext['recentMessages']) =>
+  messages.slice(-3).map((message) => ({
+    role: message.role,
+    content: truncateText(message.content, 240) ?? ''
+  }));
+
+const summarizeCareerContext = (
+  careerContext: ChatbotContext['careerContext']
+) => {
+  const data = (careerContext ?? {}) as Record<string, any>;
+  const resume = (data.resume ?? {}) as Record<string, unknown>;
+  const roadmap = (data.roadmap ?? {}) as Record<string, unknown>;
+  const interview = (data.interview ?? {}) as Record<string, unknown>;
+  const nextAction = (data.nextAction ?? {}) as Record<string, unknown>;
+
+  return {
+    resume: {
+      targetRole: truncateText(resume.inferredTargetRole, 80),
+      score: resume.score,
+      missingSkills: stringList(resume.missingSkills),
+      keywordGaps: stringList(resume.keywordGaps)
+    },
+    roadmap: {
+      targetRole: truncateText(roadmap.targetRole, 80),
+      currentLevel: truncateText(roadmap.currentLevel, 50),
+      nextMilestone: truncateText(roadmap.nextMilestone, 140),
+      activeMilestone: truncateText(roadmap.activeMilestone, 140),
+      skillsToBuild: stringList(roadmap.skillsToBuild)
+    },
+    interview: {
+      weakestQuestions: stringList(interview.weakestQuestions, 2),
+      practiceAreas: stringList(interview.suggestedPracticeAreas, 2)
+    },
+    nextAction: truncateText(nextAction.label, 120)
+  };
+};
+
+const formatStructuredResponse = (
+  response: z.infer<typeof ChatbotResponseSchema>
+) => {
+  const sections = [response.response.trim()];
+
+  if (response.nextActions?.length) {
+    sections.push(
+      [
+        'Next actions:',
+        ...response.nextActions.slice(0, 2).map((item) => `- ${item}`)
+      ].join('\n')
+    );
+  }
+
+  if (response.questions?.length) {
+    sections.push(
+      [
+        'Question:',
+        ...response.questions.slice(0, 1).map((item) => `- ${item}`)
+      ].join('\n')
+    );
+  }
+
+  return sections.join('\n\n');
+};
+
+const getFallbackFocus = (message: string) => {
+  const lowerMessage = message.toLowerCase();
+  if (lowerMessage.includes('resume')) return 'resume';
+  if (lowerMessage.includes('interview')) return 'interview';
+  if (
+    lowerMessage.includes('roadmap') ||
+    lowerMessage.includes('career') ||
+    lowerMessage.includes('job')
+  ) {
+    return 'career plan';
+  }
+
+  return 'career goal';
+};
+
+const getManualSteps = (focus: string) => {
+  if (focus === 'resume') {
+    return [
+      'Match your summary to one target role instead of writing for every job.',
+      'Rewrite each bullet with action, scope, and measurable outcome.',
+      'Compare one job post against your resume and add only the keywords you can honestly support.'
+    ];
+  }
+
+  if (focus === 'interview') {
+    return [
+      'Pick three role requirements and prepare one STAR story for each.',
+      'Practice each answer out loud until it fits in 60-90 seconds.',
+      'End every answer by connecting the example back to the target role.'
+    ];
+  }
+
+  if (focus === 'career plan') {
+    return [
+      'Choose one target role for the next 30 days.',
+      'List the top five missing skills from recent job posts.',
+      'Turn the highest-priority skill into one portfolio project or weekly practice block.'
+    ];
+  }
+
+  return [
+    'Write the role you want next and why it fits your current experience.',
+    'List the strongest three examples you can already prove.',
+    'Choose one small action for this week: update a resume section, practice one answer, or apply to two matched roles.'
+  ];
+};
+
+const getFallbackLead = (focus: string) => {
+  if (focus === 'resume') {
+    return 'Here is how you can still improve your resume while the AI service recovers:';
+  }
+
+  if (focus === 'interview') {
+    return 'Here is how you can still prepare for your interview while the AI service recovers:';
+  }
+
+  if (focus === 'career plan') {
+    return 'Here is how you can still make progress on your career plan while the AI service recovers:';
+  }
+
+  return 'Here is how you can still make useful progress while the AI service recovers:';
+};
+
+const getRetryAfterMs = (error: unknown) => {
+  if (!(error instanceof ApiError)) return undefined;
+  const details = error.details;
+  if (!details || typeof details !== 'object') return undefined;
+  const retryAfterMs = (details as { retryAfterMs?: unknown }).retryAfterMs;
+  return typeof retryAfterMs === 'number' ? retryAfterMs : undefined;
+};
 
 /**
  * Chatbot AI Service
@@ -27,7 +185,18 @@ const defaultModel: AiModel = env.OPENAI_API_KEY
  */
 export class ChatbotAiService extends BaseAiService {
   constructor() {
-    super(defaultModel);
+    super(
+      getDefaultAiModel('chatbot', {
+        temperature: 0.6,
+        maxTokens: CHATBOT_RESPONSE_MAX_TOKENS
+      }),
+      {
+        maxRetries: 2,
+        timeoutMs: 20000,
+        retryDelayMs: 600,
+        unavailableRetryDelayMs: 3000
+      }
+    );
   }
 
   /**
@@ -47,10 +216,16 @@ export class ChatbotAiService extends BaseAiService {
           userProfile: context.userProfile
             ? `${context.userProfile.name}, ${context.userProfile.role || 'Not specified'}, Level: ${context.userProfile.level || 'General'}`
             : 'Anonymous',
-          context: JSON.stringify(context.recentMessages.slice(-5)),
+          context: JSON.stringify(
+            summarizeRecentMessages(context.recentMessages)
+          ),
+          careerContext: JSON.stringify(
+            summarizeCareerContext(context.careerContext)
+          ),
           userMessage
         },
-        ChatbotResponseSchema
+        ChatbotResponseSchema,
+        { schemaRetries: 1 }
       );
 
       const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -58,22 +233,116 @@ export class ChatbotAiService extends BaseAiService {
       return {
         sessionId,
         messageId,
-        content: response.response,
+        content: formatStructuredResponse(response),
         role: 'assistant',
         timestamp: new Date().toISOString(),
-        context: this.updateContext(context, userMessage, response.response),
+        context: this.updateContext(
+          context,
+          userMessage,
+          formatStructuredResponse(response)
+        ),
         metadata: {
-          provider:
-            this.defaultModel.provider === 'openai' ? 'OPENAI' : 'GEMINI',
-          confidence: response.confidence || 0.8
+          provider: getConfiguredPrismaAiProvider(this.defaultModel.provider),
+          confidence: response.confidence || 0.8,
+          structured: {
+            summary: response.summary,
+            nextActions: response.nextActions ?? [],
+            questions: response.questions ?? [],
+            resources: response.resources ?? [],
+            timeline: response.timeline ?? []
+          }
         }
       };
     } catch (error) {
       logger.error({ error, sessionId }, 'Chatbot AI error');
-      throw new Error(
-        `Failed to generate chatbot response: ${error instanceof Error ? error.message : 'Unknown error'}`
+      return this.createFallbackResponse(
+        userMessage,
+        sessionId,
+        context,
+        error
       );
     }
+  }
+
+  async generatePublicResponse(
+    userMessage: string,
+    sessionId: string,
+    context: ChatbotContext
+  ): Promise<ChatbotResponsePayload> {
+    try {
+      const response = await this.executePromptWithSchema(
+        'public-homepage-chatbot-response',
+        {
+          context: JSON.stringify(summarizeRecentMessages(context.recentMessages)),
+          userMessage
+        },
+        ChatbotResponseSchema,
+        { schemaRetries: 1 }
+      );
+
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const content = formatStructuredResponse(response);
+
+      return {
+        sessionId,
+        messageId,
+        content,
+        role: 'assistant',
+        timestamp: new Date().toISOString(),
+        context: this.updateContext(context, userMessage, content),
+        metadata: {
+          provider: getConfiguredPrismaAiProvider(this.defaultModel.provider),
+          confidence: response.confidence || 0.86,
+          structured: {
+            summary: response.summary,
+            nextActions: response.nextActions ?? [],
+            questions: response.questions ?? [],
+            resources: response.resources ?? [],
+            timeline: response.timeline ?? []
+          }
+        }
+      };
+    } catch (error) {
+      logger.error({ error, sessionId }, 'Public homepage chatbot AI error');
+      return this.createFallbackResponse(userMessage, sessionId, context, error);
+    }
+  }
+
+  private createFallbackResponse(
+    userMessage: string,
+    sessionId: string,
+    context: ChatbotContext,
+    error?: unknown
+  ): ChatbotResponsePayload {
+    const focus = getFallbackFocus(userMessage);
+    const steps = getManualSteps(focus);
+    const reason = error instanceof ApiError ? error.code : 'AI_UNAVAILABLE';
+    const retryAfterMs = getRetryAfterMs(error);
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const response = [
+      AI_SERVICE_UNAVAILABLE_MESSAGE,
+      '',
+      getFallbackLead(focus),
+      ...steps.map((step, index) => `${index + 1}. ${step}`),
+      '',
+      'When the retry timer is ready, ask again and CareerAI will personalize this guidance with your latest context.'
+    ].join('\n');
+
+    return {
+      sessionId,
+      messageId,
+      content: response,
+      role: 'assistant',
+      timestamp: new Date().toISOString(),
+      context: this.updateContext(context, userMessage, response),
+      metadata: {
+        provider: getConfiguredPrismaAiProvider(this.defaultModel.provider),
+        confidence: 0.35,
+        fallback: true,
+        reason,
+        retryAfterMs
+      }
+    };
   }
 
   /**
@@ -86,7 +355,7 @@ export class ChatbotAiService extends BaseAiService {
 
     const phase = `\nConversation Phase: ${context.conversationPhase}`;
 
-    return `You are a professional AI career coach and advisor. You provide thoughtful, actionable advice on career development, skill building, and professional growth.${userProfile}${phase}
+    return `You are a professional AI career mentor and advisor. You provide thoughtful, actionable advice on career development, skill building, and professional growth.${userProfile}${phase}
 
 Guidelines:
 - Provide clear, concise, and actionable advice

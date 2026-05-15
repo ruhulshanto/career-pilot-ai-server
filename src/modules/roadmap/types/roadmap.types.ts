@@ -1,20 +1,51 @@
 import { AiFeedbackType, ProcessingStatus } from '@prisma/client';
 
+export type RoadmapMilestoneStatus = 'pending' | 'in-progress' | 'completed';
+export type RoadmapSkillStatus =
+  | 'not-started'
+  | 'learning'
+  | 'practicing'
+  | 'proficient';
+
 export type RoadmapMilestone = {
   id: string;
   title: string;
   description: string;
+  durationWeeks: number;
+  requiredSkills: string[];
+  recommendedResources: string[];
+  projectSuggestions: string[];
+  successCriteria: string[];
   progress: number;
-  status: 'pending' | 'in-progress' | 'completed';
-  recommendation: string;
+  status: RoadmapMilestoneStatus;
 };
 
 export type RoadmapSkill = {
   name: string;
+  category: string;
   currentLevel: string;
   targetLevel: string;
+  priority: 'low' | 'medium' | 'high' | 'critical';
   progress: number;
-  importance: string;
+  status: RoadmapSkillStatus;
+};
+
+export type RoadmapProject = {
+  title: string;
+  description: string;
+  difficulty: string;
+  estimatedWeeks: number;
+  technologies: string[];
+  skillsDemonstrated: string[];
+  portfolioValue: string;
+};
+
+export type LearningGoal = {
+  title: string;
+  description: string;
+  resources: string[];
+  progress: number;
+  status: RoadmapMilestoneStatus;
 };
 
 export type RoadmapTimelinePhase = {
@@ -31,37 +62,56 @@ export type RoadmapTimeline = {
 export interface CreateRoadmapRequest {
   targetRole: string;
   currentLevel: string;
+  experienceLevel?: string;
+  preferredPath: string;
   careerGoals: string;
-  experienceSummary: string;
-  industry: string;
+  industry?: string;
+  sourceResumeId?: string;
+  regenerateFromId?: string;
 }
 
 export interface UpdateRoadmapProgressRequest {
   milestones?: Array<{
     id: string;
     progress?: number;
-    status?: 'pending' | 'in-progress' | 'completed';
+    status?: RoadmapMilestoneStatus;
   }>;
   skills?: Array<{
     name: string;
-    currentLevel?: string;
-    targetLevel?: string;
     progress?: number;
+    status?: RoadmapSkillStatus;
   }>;
-  timeline?: RoadmapTimeline;
 }
 
 export interface RoadmapResponse {
   id: string;
   userId: string;
+  title?: string;
   targetRole: string;
   currentLevel: string;
+  preferredPath?: string;
+  estimatedDurationMonths?: number;
+  summary?: string;
+  progress: number;
+  version: number;
+  sourceResumeId?: string;
+  regeneratedFromId?: string;
   status: ProcessingStatus;
   milestones: RoadmapMilestone[];
   skills: RoadmapSkill[];
+  projects: RoadmapProject[];
+  certifications: string[];
+  learningRecommendations: string[];
   timeline: RoadmapTimeline;
+  failureReason?: string;
+  retryAfterMs?: number;
+  retryAvailableAt?: Date;
+  retryAttempt?: number;
+  retryLimit?: number;
+  retryLimitReached?: boolean;
   createdAt: Date;
   updatedAt: Date;
+  completedAt?: Date;
   aiFeedbacks: Array<{
     id: string;
     type: AiFeedbackType;
@@ -82,6 +132,6 @@ export interface GetRoadmapsQuery {
   status?: ProcessingStatus;
   targetRole?: string;
   search?: string;
-  sortBy?: 'createdAt' | 'updatedAt' | 'targetRole';
+  sortBy?: 'createdAt' | 'updatedAt' | 'targetRole' | 'progress';
   sortOrder?: 'asc' | 'desc';
 }

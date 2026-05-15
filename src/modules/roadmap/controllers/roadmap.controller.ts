@@ -41,6 +41,17 @@ export const getRoadmaps = asyncHandler(async (req: Request, res: Response) => {
     );
 });
 
+export const getLatestRoadmap = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const roadmap = await roadmapService.getLatestRoadmap(userId);
+
+    return res
+      .status(StatusCodes.OK)
+      .json(apiResponse('Latest career roadmap retrieved successfully', roadmap));
+  }
+);
+
 export const getRoadmapById = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user!.id;

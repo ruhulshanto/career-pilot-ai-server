@@ -19,11 +19,12 @@ export const apiResponse = <T>(
 
 export const apiErrorResponse = (
   message: string,
-  options?: { code?: string; details?: unknown; stack?: string }
+  options?: { code?: string; details?: unknown; stack?: string; requestId?: string }
 ): ApiErrorResponse => ({
   success: false,
   message,
   ...(options?.code ? { code: options.code } : {}),
   ...(options?.details ? { details: options.details } : {}),
-  ...(options?.stack ? { stack: options.stack } : {})
+  ...(options?.stack ? { stack: options.stack } : {}),
+  ...(options?.requestId ? { requestId: options.requestId } : {})
 });

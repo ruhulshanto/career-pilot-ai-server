@@ -9,6 +9,7 @@ import type {
 import { z } from 'zod';
 import { logger } from '@/logging/logger.js';
 import { getRequestId } from '@shared/utils/request-context.js';
+import { ApiError } from '@shared/errors/api-error.js';
 
 export abstract class BaseAiService {
   protected client: AiClient;
@@ -59,19 +60,53 @@ export abstract class BaseAiService {
     schema: z.ZodSchema<T>,
     options?: {
       model?: AiModel;
+      schemaRetries?: number;
     }
   ): Promise<T> {
-    const response = await this.executePrompt(promptId, variables, {
-      ...options,
-      responseFormat: 'json'
-    });
+    const maxSchemaAttempts = options?.schemaRetries ?? 2;
 
-    return AiResponseParser.parseJson(schema, response.content);
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxSchemaAttempts; attempt++) {
+      const response = await this.executePrompt(promptId, variables, {
+        ...options,
+        responseFormat: 'json'
+      });
+
+      try {
+        return AiResponseParser.parseJson(schema, response.content);
+      } catch (error) {
+        lastError = error;
+        if (!this.isRetryableStructuredResponseError(error) || attempt === maxSchemaAttempts) {
+          throw error;
+        }
+
+        logger.warn(
+          {
+            type: 'ai_response_parse_retry',
+            promptId,
+            attempt,
+            maxSchemaAttempts,
+            requestId: getRequestId(),
+            code: error instanceof ApiError ? error.code : undefined
+          },
+          'Retrying AI prompt because response was not valid structured JSON'
+        );
+      }
+    }
+
+    throw lastError;
   }
 
   protected async executeRawRequest(
     request: AiCompletionRequest
   ): Promise<AiCompletionResponse> {
     return this.client.complete(request);
+  }
+
+  private isRetryableStructuredResponseError(error: unknown) {
+    if (!(error instanceof ApiError)) return false;
+    return ['EMPTY_AI_RESPONSE', 'JSON_PARSE_ERROR', 'INVALID_AI_RESPONSE'].includes(
+      error.code ?? ''
+    );
   }
 }

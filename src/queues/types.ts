@@ -13,6 +13,23 @@ export type JobResult = {
   metadata?: Record<string, unknown>;
 };
 
+export type KeepJobsOption =
+  {
+    age: number;
+    count?: number;
+    limit?: number;
+  };
+
+export type KeepJobsConfig =
+  | number
+  | boolean
+  | KeepJobsOption
+  | {
+      age?: number;
+      count?: number;
+      limit?: number;
+    };
+
 export type JobProcessor<TData = JobData, TResult = JobResult> = (job: {
   id: string;
   name: string;
@@ -30,6 +47,7 @@ export type WorkerConfig = {
     max: number;
     duration: number;
   };
-  removeOnComplete?: number | boolean;
-  removeOnFail?: number | boolean;
+  lockDuration?: number;
+  removeOnComplete?: KeepJobsConfig;
+  removeOnFail?: KeepJobsConfig;
 };

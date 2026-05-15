@@ -11,6 +11,7 @@ export type ApiErrorResponse = {
   code?: string;
   details?: unknown;
   stack?: string;
+  requestId?: string;
 };
 
 export type PaginationParams = {

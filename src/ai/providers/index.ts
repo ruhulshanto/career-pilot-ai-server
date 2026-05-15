@@ -1,21 +1,31 @@
+import { CHATBOT_AI_PROVIDER } from '@config/ai.js';
+import { env } from '@config/env.js';
 import type { AiProviderName } from '../types.js';
 import { BaseAiProvider } from './base.js';
-import { GeminiProvider } from './gemini.js';
-import { OpenAiProvider } from './openai.js';
+import { GroqProvider } from './groq.js';
 
 const providers = new Map<AiProviderName, BaseAiProvider>();
 
 export const getAiProvider = (name: AiProviderName): BaseAiProvider => {
   if (!providers.has(name)) {
     switch (name) {
-      case 'openai':
-        providers.set(name, new OpenAiProvider());
+      case 'groq':
+        providers.set(name, new GroqProvider());
         break;
-      case 'gemini':
-        providers.set(name, new GeminiProvider());
+      case CHATBOT_AI_PROVIDER:
+        providers.set(
+          name,
+          new GroqProvider({
+            name: CHATBOT_AI_PROVIDER,
+            apiKey: env.CHATBOT_GROQ_API_KEY,
+            configurationName: 'Chatbot Groq'
+          })
+        );
         break;
       default:
-        throw new Error(`Unsupported AI provider: ${name}`);
+        throw new Error(
+          `Unsupported AI provider: ${name}. Groq is the enabled provider.`
+        );
     }
   }
 
@@ -23,5 +33,5 @@ export const getAiProvider = (name: AiProviderName): BaseAiProvider => {
 };
 
 export const getAvailableProviders = (): AiProviderName[] => {
-  return ['openai', 'gemini'];
+  return ['groq', CHATBOT_AI_PROVIDER];
 };

@@ -5,7 +5,9 @@ export interface SendNotificationPayload {
   type: NotificationType;
   title: string;
   message: string;
+  actionLink?: string;
   metadata?: Record<string, any>;
+  dedupeKey?: string;
   channels: ('IN_APP' | 'EMAIL')[];
 }
 
@@ -15,6 +17,7 @@ export interface NotificationResponse {
   status: NotificationStatus;
   title: string;
   message: string;
+  actionLink?: string;
   metadata?: any;
   readAt?: string;
   createdAt: string;
@@ -24,6 +27,7 @@ export interface GetNotificationsQuery {
   page?: number;
   limit?: number;
   status?: NotificationStatus;
+  types?: NotificationType[];
 }
 
 export interface EmailPayload {

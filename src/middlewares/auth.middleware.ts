@@ -20,9 +20,18 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
     throw new ApiError(401, 'Invalid or inactive account');
   }
 
+  if (payload.sid) {
+    const session = await authRepository.findSession(payload.sid, payload.sub);
+    if (!session) {
+      throw new ApiError(401, 'Session expired or revoked');
+    }
+    await authRepository.touchSession(payload.sid);
+  }
+
   req.user = {
     id: user.id,
-    role: user.role
+    role: user.role,
+    sessionId: payload.sid
   };
 
   next();

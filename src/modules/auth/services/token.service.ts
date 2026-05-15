@@ -10,6 +10,7 @@ import type { SignOptions } from 'jsonwebtoken';
 export type AuthTokenPayload = {
   sub: string;
   role: UserRole;
+  sid?: string;
 };
 
 const expirationPattern = /^(\d+)(ms|s|m|h|d)$/;
@@ -44,22 +45,23 @@ const assertAuthPayload = (payload: string | jwt.JwtPayload, tokenType: 'access'
     throw new ApiError(401, `Invalid ${tokenType} token`);
   }
 
-  return {
-    sub: payload.sub,
-    role: payload.role
+    return {
+      sub: payload.sub,
+      role: payload.role,
+      sid: typeof payload.sid === 'string' ? payload.sid : undefined
+    };
   };
-};
 
 export const tokenService = {
-  signAccessToken(userId: string, role: UserRole) {
-    return jwt.sign({ role }, env.JWT_ACCESS_SECRET, {
+  signAccessToken(userId: string, role: UserRole, sessionId?: string) {
+    return jwt.sign({ role, sid: sessionId }, env.JWT_ACCESS_SECRET, {
       subject: userId,
       expiresIn: env.JWT_ACCESS_EXPIRES_IN as SignOptions['expiresIn']
     });
   },
 
-  signRefreshToken(userId: string, role: UserRole) {
-    return jwt.sign({ role }, env.JWT_REFRESH_SECRET, {
+  signRefreshToken(userId: string, role: UserRole, sessionId?: string) {
+    return jwt.sign({ role, sid: sessionId }, env.JWT_REFRESH_SECRET, {
       subject: userId,
       expiresIn: env.JWT_REFRESH_EXPIRES_IN as SignOptions['expiresIn']
     });
@@ -93,6 +95,18 @@ export const tokenService = {
 
   hashToken(token: string) {
     return crypto.createHash('sha256').update(token).digest('hex');
+  },
+
+  createOpaqueToken(byteLength = 32) {
+    return crypto.randomBytes(byteLength).toString('base64url');
+  },
+
+  getEmailVerificationExpiresAt() {
+    return new Date(Date.now() + 24 * 60 * 60 * 1000);
+  },
+
+  getPasswordResetExpiresAt() {
+    return new Date(Date.now() + 30 * 60 * 1000);
   },
 
   getRefreshTokenExpiresAt() {

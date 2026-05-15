@@ -1,6 +1,7 @@
 import { authenticate } from '@middlewares/auth.middleware.js';
 import {
   generateRoadmap,
+  getLatestRoadmap,
   getRoadmapById,
   getRoadmaps,
   updateRoadmapProgress
@@ -28,6 +29,7 @@ router.get(
   validateRequest({ query: getRoadmapsQuerySchema }),
   getRoadmaps
 );
+router.get('/latest', authenticate, getLatestRoadmap);
 router.get(
   '/:id',
   authenticate,

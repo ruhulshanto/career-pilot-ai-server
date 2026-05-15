@@ -1,23 +1,23 @@
 import { ProcessingStatus, AiFeedbackType } from '@prisma/client';
 
-export interface CreateResumeRequest {
-  title: string;
-  fileUrl: string;
-  fileType: string;
-  fileSize?: number;
-}
-
 export interface ResumeResponse {
   id: string;
   userId: string;
   title: string;
-  fileUrl: string;
+  fileUrl?: string;
   fileType: string;
   fileSize?: number;
   status: ProcessingStatus;
   parsedText?: string;
   createdAt: Date;
   updatedAt: Date;
+  latestFeedback?: {
+    id: string;
+    status: ProcessingStatus;
+    score?: number;
+    summary?: string;
+    createdAt: Date;
+  };
 }
 
 export interface ResumeWithFeedback extends ResumeResponse {
@@ -34,6 +34,8 @@ export interface AiFeedbackResponse {
   strengths?: any;
   weaknesses?: any;
   suggestions?: any;
+  rawResponse?: any;
+  errorMessage?: string;
   createdAt: Date;
 }
 

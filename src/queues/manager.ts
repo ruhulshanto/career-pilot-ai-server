@@ -1,37 +1,72 @@
 import { getRedis } from '@config/redis.js';
 import { Queue, QueueOptions } from 'bullmq';
 import { getRequestId } from '@shared/utils/request-context.js';
-import type { QueueName } from './types.js';
+import type { KeepJobsConfig, KeepJobsOption, QueueName } from './types.js';
+import type { JobOptions } from './job-scheduler.js';
+
+const DEFAULT_KEEP_JOBS_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+export const keepJobsByCount = (count: number): KeepJobsOption => ({
+  age: DEFAULT_KEEP_JOBS_AGE_SECONDS,
+  count
+});
+
+export const createSafeJobId = (
+  ...parts: Array<string | number | null | undefined>
+) =>
+  parts
+    .filter((part): part is string | number => part !== null && part !== undefined)
+    .map((part) => String(part).replace(/[^a-zA-Z0-9_-]/g, '-'))
+    .join('__');
+
+export const normalizeKeepJobsOption = (
+  value: KeepJobsConfig | undefined,
+  fallbackCount: number
+): KeepJobsOption => {
+  if (typeof value === 'number') return keepJobsByCount(value);
+  if (typeof value === 'boolean') {
+    return keepJobsByCount(value ? fallbackCount : 0);
+  }
+  if (value) {
+    return {
+      age: value.age ?? DEFAULT_KEEP_JOBS_AGE_SECONDS,
+      count: value.count,
+      limit: value.limit
+    };
+  }
+
+  return keepJobsByCount(fallbackCount);
+};
 
 const queueConfigs: Record<QueueName, Omit<QueueOptions, 'connection'>> = {
   'resume-analysis': {
     defaultJobOptions: {
-      removeOnComplete: 50,
-      removeOnFail: 20,
+      removeOnComplete: keepJobsByCount(50),
+      removeOnFail: keepJobsByCount(20),
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 }
     }
   },
   'ai-processing': {
     defaultJobOptions: {
-      removeOnComplete: 100,
-      removeOnFail: 10,
+      removeOnComplete: keepJobsByCount(100),
+      removeOnFail: keepJobsByCount(500),
       attempts: 2,
       backoff: { type: 'exponential', delay: 5000 }
     }
   },
   notifications: {
     defaultJobOptions: {
-      removeOnComplete: 1000,
-      removeOnFail: 50,
+      removeOnComplete: keepJobsByCount(1000),
+      removeOnFail: keepJobsByCount(50),
       attempts: 5,
       backoff: { type: 'exponential', delay: 1000 }
     }
   },
   analytics: {
     defaultJobOptions: {
-      removeOnComplete: 200,
-      removeOnFail: 20,
+      removeOnComplete: keepJobsByCount(200),
+      removeOnFail: keepJobsByCount(20),
       attempts: 3,
       backoff: { type: 'exponential', delay: 3000 }
     }
@@ -54,11 +89,30 @@ export const getQueue = (name: QueueName): Queue => {
 /**
  * Add a job to the queue while preserving the request context (tracing)
  */
-export const addJobWithContext = async (queueName: QueueName, jobName: string, data: any) => {
+export const addJobWithContext = async (
+  queueName: QueueName,
+  jobName: string,
+  data: any,
+  options: JobOptions = {}
+) => {
   const queue = getQueue(queueName);
   return queue.add(jobName, {
     ...data,
     _trace: { requestId: getRequestId() }
+  }, {
+    jobId: options.jobId ? createSafeJobId(options.jobId) : undefined,
+    delay: options.delay,
+    priority: options.priority,
+    attempts: options.attempts,
+    backoff: options.backoff,
+    removeOnComplete:
+      options.removeOnComplete === undefined
+        ? undefined
+        : normalizeKeepJobsOption(options.removeOnComplete, 100),
+    removeOnFail:
+      options.removeOnFail === undefined
+        ? undefined
+        : normalizeKeepJobsOption(options.removeOnFail, 500)
   });
 };
 

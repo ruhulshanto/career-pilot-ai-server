@@ -1,9 +1,10 @@
 import { Queue } from 'bullmq';
 import { logger } from '@/logging/logger.js';
-import type { JobData, JobResult, QueueName } from './types.js';
-import { getQueue } from './manager.js';
+import type { JobData, JobResult, KeepJobsConfig, QueueName } from './types.js';
+import { createSafeJobId, getQueue, normalizeKeepJobsOption } from './manager.js';
 
 export type JobOptions = {
+  jobId?: string;
   delay?: number;
   priority?: number;
   attempts?: number;
@@ -11,8 +12,8 @@ export type JobOptions = {
     type: 'fixed' | 'exponential';
     delay: number;
   };
-  removeOnComplete?: number | boolean;
-  removeOnFail?: number | boolean;
+  removeOnComplete?: KeepJobsConfig;
+  removeOnFail?: KeepJobsConfig;
 };
 
 export class JobScheduler {
@@ -26,12 +27,19 @@ export class JobScheduler {
 
     try {
       const job = await queue.add(jobName, data, {
+        jobId: options.jobId ? createSafeJobId(options.jobId) : undefined,
         delay: options.delay,
         priority: options.priority,
         attempts: options.attempts,
         backoff: options.backoff,
-        removeOnComplete: options.removeOnComplete,
-        removeOnFail: options.removeOnFail
+        removeOnComplete:
+          options.removeOnComplete === undefined
+            ? undefined
+            : normalizeKeepJobsOption(options.removeOnComplete, 100),
+        removeOnFail:
+          options.removeOnFail === undefined
+            ? undefined
+            : normalizeKeepJobsOption(options.removeOnFail, 500)
       });
 
       logger.info(
@@ -64,12 +72,19 @@ export class JobScheduler {
         name,
         data,
         opts: {
+          jobId: options.jobId ? createSafeJobId(options.jobId) : undefined,
           delay: options.delay,
           priority: options.priority,
           attempts: options.attempts,
           backoff: options.backoff,
-          removeOnComplete: options.removeOnComplete,
-          removeOnFail: options.removeOnFail
+          removeOnComplete:
+            options.removeOnComplete === undefined
+              ? undefined
+              : normalizeKeepJobsOption(options.removeOnComplete, 100),
+          removeOnFail:
+            options.removeOnFail === undefined
+              ? undefined
+              : normalizeKeepJobsOption(options.removeOnFail, 500)
         }
       }));
 

@@ -2,6 +2,7 @@ import { asyncHandler } from '@shared/utils/async-handler.js';
 import { chatbotService } from '@modules/chatbot/services/chatbot.service.js';
 import {
   createSessionSchema,
+  publicMessageSchema,
   sendMessageSchema,
   getSessionsQuerySchema,
   getMessagesQuerySchema,
@@ -10,11 +11,50 @@ import {
 import { getRedis } from '@config/redis.js';
 import type { Request, Response } from 'express';
 
+const writeSseEvent = (res: Response, event: string, data: unknown) => {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+};
+
 /**
  * Chatbot Controller
  * Handles HTTP requests for chatbot endpoints
  */
 export const chatbotController = {
+  /**
+   * POST /api/chatbot/public-message
+   * Generate a stateless public homepage assistant reply.
+   */
+  sendPublicMessage: asyncHandler(async (req: Request, res: Response) => {
+    const result = publicMessageSchema.safeParse(req.body);
+    if (!result.success) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Please send a valid career question.',
+        details: result.error.flatten()
+      });
+    }
+
+    const reply = await chatbotService.sendPublicMessage(result.data);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: reply.messageId,
+        role: reply.role,
+        content: reply.content,
+        timestamp: reply.timestamp,
+        metadata: {
+          confidence: reply.metadata?.confidence,
+          fallback: reply.metadata?.fallback,
+          reason: reply.metadata?.reason,
+          retryAfterMs: reply.metadata?.retryAfterMs,
+          structured: reply.metadata?.structured
+        }
+      }
+    });
+  }),
+
   /**
    * POST /api/chatbot/sessions
    * Create a new chatbot session
@@ -217,18 +257,35 @@ export const chatbotController = {
 
     const redis = getRedis().duplicate();
     const channel = `session:${sessionId}:messages`;
+    const keepAlive = setInterval(() => {
+      res.write(': keep-alive\n\n');
+    }, 25000);
 
     await redis.subscribe(channel);
 
     redis.on('message', (chan, message) => {
       if (chan === channel) {
-        res.write(`data: ${message}\n\n`);
+        try {
+          const payload = JSON.parse(message) as { type?: string };
+
+          if (payload.type === 'done') {
+            writeSseEvent(res, 'done', payload);
+            return;
+          }
+
+          writeSseEvent(res, 'message', payload);
+          return;
+        } catch {
+          res.write('event: message\n');
+          res.write(`data: ${message}\n\n`);
+        }
       }
     });
 
     // Handle client disconnect
     req.on('close', () => {
+      clearInterval(keepAlive);
       redis.disconnect();
     });
-  }),
+  })
 };

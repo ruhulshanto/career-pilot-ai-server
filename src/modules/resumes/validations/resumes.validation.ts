@@ -1,11 +1,8 @@
 import { z } from 'zod';
 import { ProcessingStatus } from '@prisma/client';
 
-export const submitResumeSchema = z.object({
-  title: z.string().min(2).max(150),
-  fileUrl: z.string().url(),
-  fileType: z.string().min(2).max(50),
-  fileSize: z.number().positive().optional()
+export const analyzeResumeUploadSchema = z.object({
+  title: z.string().min(2).max(150).optional()
 });
 
 export const getResumesQuerySchema = z.object({

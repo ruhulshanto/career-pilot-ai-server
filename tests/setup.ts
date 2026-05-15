@@ -1,7 +1,13 @@
 import { vi, beforeEach } from 'vitest';
+import { prismaMock } from './mocks/prisma.mock.js';
+
+vi.mock('@config/prisma.js', () => ({
+  prisma: prismaMock,
+}));
 
 // Mock Redis
 vi.mock('@config/redis.js', () => ({
+  isRedisReady: vi.fn(() => false),
   getRedis: vi.fn(() => ({
     get: vi.fn(),
     set: vi.fn(),

@@ -6,7 +6,15 @@ export class ApiError extends AppError {
     message: string,
     details?: unknown
   ) {
-    super({ statusCode, message, details });
+    const code =
+      details &&
+      typeof details === 'object' &&
+      'code' in details &&
+      typeof (details as { code?: unknown }).code === 'string'
+        ? (details as { code: string }).code
+        : undefined;
+
+    super({ statusCode, message, code, details });
     this.name = 'ApiError';
   }
 }

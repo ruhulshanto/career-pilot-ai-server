@@ -12,6 +12,9 @@ const router = Router();
 // List notifications
 router.get('/', authenticate, notificationsController.getNotifications);
 
+// Count unread notifications
+router.get('/unread-count', authenticate, notificationsController.getUnreadCount);
+
 // Mark all as read
 router.patch('/read-all', authenticate, notificationsController.markAllAsRead);
 

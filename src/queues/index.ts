@@ -3,3 +3,4 @@ export * from './manager.js';
 export * from './types.js';
 export * from './worker-manager.js';
 export * from './job-scheduler.js';
+export * from './recurring-jobs.js';

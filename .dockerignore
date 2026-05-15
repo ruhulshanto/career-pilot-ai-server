@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+uploads
+.env
+.env.*
+!.env.example
+*.log
+pnpm-debug.log*
+.DS_Store
+.vscode
+.idea

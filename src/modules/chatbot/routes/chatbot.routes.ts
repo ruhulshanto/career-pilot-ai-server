@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '@middlewares/auth.middleware.js';
 import { chatbotController } from '@modules/chatbot/controllers/chatbot.controller.js';
-import { aiLimiter } from '@middlewares/rate-limit.middleware.js';
+import { aiLimiter, publicAiLimiter } from '@middlewares/rate-limit.middleware.js';
 
 const router = Router();
 
@@ -9,6 +9,9 @@ const router = Router();
  * Chatbot Routes
  * All routes require authentication
  */
+
+// Public homepage assistant. Stateless and unauthenticated by design.
+router.post('/public-message', publicAiLimiter, chatbotController.sendPublicMessage);
 
 // Session management
 router.post('/sessions', authenticate, chatbotController.createSession);

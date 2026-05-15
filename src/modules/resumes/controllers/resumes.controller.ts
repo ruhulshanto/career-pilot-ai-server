@@ -5,23 +5,25 @@ import {
   apiErrorResponse
 } from '@shared/responses/api-response.js';
 import { asyncHandler } from '@shared/utils/async-handler.js';
-import {
-  CreateResumeRequest,
-  GetResumesQuery
-} from '../types/resumes.types.js';
+import { GetResumesQuery } from '../types/resumes.types.js';
 import { StatusCodes } from 'http-status-codes';
+import { analyzeResumeUploadSchema } from '../validations/resumes.validation.js';
+import { unlink } from 'node:fs/promises';
 
-export const submitResume = asyncHandler(
-  async (req: Request, res: Response) => {
-    const userId = req.user!.id;
-    const payload: CreateResumeRequest = req.body;
+const cleanupUploadedFile = async (file?: Express.Multer.File) => {
+  if (!file?.path) return;
+  await unlink(file.path).catch(() => undefined);
+};
 
-    const resume = await resumesService.submitResume(userId, payload);
-
-    return res
-      .status(StatusCodes.CREATED)
-      .json(apiResponse('Resume submitted successfully', resume));
-  }
+export const rejectDirectResumeSubmission = asyncHandler(
+  async (_req: Request, res: Response) =>
+    res
+      .status(StatusCodes.BAD_REQUEST)
+      .json(
+        apiErrorResponse(
+          'Resume files must be uploaded directly as PDF, DOCX, or TXT files.'
+        )
+      )
 );
 
 export const getResumes = asyncHandler(async (req: Request, res: Response) => {
@@ -77,6 +79,7 @@ type ResumeUploadRequest = Request & { file?: Express.Multer.File };
 
 export const analyzeResume = asyncHandler(
   async (req: ResumeUploadRequest, res: Response) => {
+    const userId = req.user!.id;
     const file = req.file;
 
     if (!file) {
@@ -85,23 +88,22 @@ export const analyzeResume = asyncHandler(
         .json(apiErrorResponse('No resume file provided'));
     }
 
-    // Simulate analysis result
-    const result = {
-      score: 85,
-      suggestions: [
-        'Add more quantifiable achievements in your AI Engineer role.',
-        'Highlight your experience with BullMQ and Redis more clearly.',
-        'Include your contributions to open-source neural architectures.'
-      ],
-      stats: {
-        keywordMatch: 78,
-        formatting: 92,
-        impact: 81
-      }
-    };
+    const validation = analyzeResumeUploadSchema.safeParse(req.body);
+    if (!validation.success) {
+      await cleanupUploadedFile(file);
+      return res
+        .status(StatusCodes.BAD_REQUEST)
+        .json(apiErrorResponse('Invalid resume analysis request'));
+    }
+
+    const resume = await resumesService.submitUploadedResume(
+      userId,
+      file,
+      validation.data.title
+    );
 
     return res
-      .status(StatusCodes.OK)
-      .json(apiResponse('Resume analysis complete', result));
+      .status(StatusCodes.ACCEPTED)
+      .json(apiResponse('Resume analysis queued successfully', resume));
   }
 );

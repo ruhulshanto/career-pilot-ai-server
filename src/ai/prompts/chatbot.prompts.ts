@@ -1,11 +1,10 @@
 import { promptManager } from './manager.js';
-import type { AiModel } from '../types.js';
+import { getDefaultAiModel } from '@config/ai.js';
 
-const defaultChatbotModel: AiModel = {
-  provider: 'openai',
-  model: 'gpt-4',
-  temperature: 0.7
-};
+const defaultChatbotModel = getDefaultAiModel('chatbot', {
+  temperature: 0.6,
+  maxTokens: 700
+});
 
 /**
  * Register Chatbot AI Prompts
@@ -14,15 +13,50 @@ const defaultChatbotModel: AiModel = {
 promptManager.register({
   id: 'chatbot-response',
   name: 'Chatbot Response',
-  description: 'Generate career coaching responses with context awareness',
+  description: 'Generate career mentoring responses with context awareness',
   template:
-    `You are an expert career coach and advisor. The user is at the ${'${phase}'} phase of conversation.\n\nUser Profile: ${'${userProfile}'}\n\nRecent context: ${'${context}'}\n\nUser message: ${'${userMessage}'}\n\n` +
-    `Provide a thoughtful response that addresses their concern and builds on the conversation context.\n` +
-    `Return JSON with: {"response": "...", "reasoning": "...", "confidence": 0.95}`,
-  variables: ['phase', 'userProfile', 'context', 'userMessage'],
+    `Act as a concise career mentor.\n` +
+    `Phase: ${'${phase}'}\nUser: ${'${userProfile}'}\nCareer context: ${'${careerContext}'}\nRecent chat: ${'${context}'}\nMessage: ${'${userMessage}'}\n\n` +
+    `Answer fast. Use the context only when relevant. Keep the reply to 4-8 short sentences. Use bullets only for concrete steps. Ask at most one follow-up question.\n` +
+    `Return valid JSON only: {"response":"...","summary":"...","nextActions":["max 2 short actions"],"questions":["max 1 question"],"confidence":0.8}`,
+  variables: [
+    'phase',
+    'userProfile',
+    'careerContext',
+    'context',
+    'userMessage'
+  ],
+  model: defaultChatbotModel,
+  systemMessage: 'You are a concise career mentor. Return valid JSON only.'
+});
+
+promptManager.register({
+  id: 'public-homepage-chatbot-response',
+  name: 'Public Homepage Chatbot Response',
+  description:
+    'Generate polished, stateless homepage assistant responses for public visitors',
+  template:
+    `You are Career Pilot AI, a premium AI career copilot on a SaaS landing page.\n` +
+    `Visitor context: unauthenticated public preview, no saved profile, no stored history.\n` +
+    `Recent public chat: ${'${context}'}\n` +
+    `Visitor message: ${'${userMessage}'}\n\n` +
+    `Your role combines AI career strategist, resume advisor, interview coach, and job-search copilot.\n` +
+    `Response rules:\n` +
+    `- Start with one specific insight or diagnosis tied to the visitor's question.\n` +
+    `- Give 2-4 practical next moves, not generic motivation.\n` +
+    `- If the question is broad, choose a smart default path and ask one precise follow-up.\n` +
+    `- For resume questions, focus on target role, proof, keywords, measurable outcomes, and ATS clarity.\n` +
+    `- For career path questions, focus on role target, skill stack, portfolio signals, and a short timeline.\n` +
+    `- For interview questions, focus on practice structure, answer quality, and feedback loops.\n` +
+    `- For job-search questions, focus on positioning, tracking, application quality, and realistic sources.\n` +
+    `- Keep it modern, confident, concise, and useful in 90-160 words.\n` +
+    `- Avoid filler phrases like "I'm here to help", "great question", or vague encouragement.\n` +
+    `- Mention creating a workspace only when it naturally helps save progress, and keep it to one sentence.\n\n` +
+    `Return valid JSON only: {"response":"...","summary":"...","nextActions":["2-3 premium short actions"],"questions":["max 1 sharp question"],"confidence":0.86}`,
+  variables: ['context', 'userMessage'],
   model: defaultChatbotModel,
   systemMessage:
-    'You are a professional career coach providing personalized guidance. Always respond with valid JSON.'
+    'You are Career Pilot AI, a premium stateless career copilot for public visitors. Return valid JSON only.'
 });
 
 promptManager.register({

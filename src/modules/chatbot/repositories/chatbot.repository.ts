@@ -1,5 +1,10 @@
 import { prisma } from '@config/prisma.js';
-import type { Prisma, ChatbotMessage as PrismaChatbotMessage, ChatbotSession as PrismaChatbotSession } from '@prisma/client';
+import type {
+  Prisma,
+  ChatbotMessage as PrismaChatbotMessage,
+  ChatbotSession as PrismaChatbotSession,
+  AiProvider
+} from '@prisma/client';
 import type {
   ChatbotSessionResponse,
   ChatbotMessage,
@@ -37,7 +42,10 @@ export const chatbotRepository = {
   /**
    * Add a message to session (Relational only)
    */
-  async addMessage(sessionId: string, message: Omit<ChatbotMessage, 'id' | 'timestamp'>): Promise<PrismaChatbotMessage> {
+  async addMessage(
+    sessionId: string,
+    message: Omit<ChatbotMessage, 'id' | 'timestamp'>
+  ): Promise<PrismaChatbotMessage> {
     const newMessage = await prisma.chatbotMessage.create({
       data: {
         sessionId,
@@ -61,18 +69,25 @@ export const chatbotRepository = {
   /**
    * Get session by ID with relational messages
    */
-  async getSessionById(sessionId: string, userId?: string): Promise<ChatbotSessionResponse | null> {
-    const session = await prisma.chatbotSession.findUnique({
-      where: { id: sessionId },
+  async getSessionById(
+    sessionId: string,
+    userId?: string
+  ): Promise<ChatbotSessionResponse | null> {
+    const session = await prisma.chatbotSession.findFirst({
+      where: {
+        id: sessionId,
+        deletedAt: null,
+        ...(userId ? { userId } : {})
+      },
       include: {
         messageList: {
           orderBy: { createdAt: 'desc' }, // Get newest first for hydration
-          take: 50 
+          take: 50
         }
       }
     });
 
-    if (!session || (userId && session.userId !== userId)) {
+    if (!session) {
       return null;
     }
 
@@ -148,13 +163,16 @@ export const chatbotRepository = {
       })
     ]);
 
-    const mappedMessages: ChatbotMessage[] = messages.map((m: PrismaChatbotMessage) => ({
-      id: m.id,
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-      timestamp: m.createdAt.toISOString(),
-      metadata: (m.metadata as unknown as ChatbotMessage['metadata']) || undefined
-    }));
+    const mappedMessages: ChatbotMessage[] = messages.map(
+      (m: PrismaChatbotMessage) => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        timestamp: m.createdAt.toISOString(),
+        metadata:
+          (m.metadata as unknown as ChatbotMessage['metadata']) || undefined
+      })
+    );
 
     return {
       messages: mappedMessages,
@@ -167,7 +185,10 @@ export const chatbotRepository = {
   /**
    * Update session context
    */
-  async updateSessionContext(sessionId: string, context: ChatbotContext): Promise<void> {
+  async updateSessionContext(
+    sessionId: string,
+    context: ChatbotContext
+  ): Promise<void> {
     await prisma.chatbotSession.update({
       where: { id: sessionId },
       data: {
@@ -191,15 +212,20 @@ export const chatbotRepository = {
   },
 
   /**
-   * Delete session (soft delete)
+   * Delete session and related persisted data.
    */
   async deleteSession(sessionId: string): Promise<void> {
-    await prisma.chatbotSession.update({
-      where: { id: sessionId },
-      data: {
-        deletedAt: new Date()
-      }
-    });
+    await prisma.$transaction([
+      prisma.chatbotMessage.deleteMany({
+        where: { sessionId }
+      }),
+      prisma.aiFeedback.deleteMany({
+        where: { chatbotSessionId: sessionId }
+      }),
+      prisma.chatbotSession.delete({
+        where: { id: sessionId }
+      })
+    ]);
   },
 
   /**
@@ -209,7 +235,7 @@ export const chatbotRepository = {
     userId: string;
     chatbotSessionId: string;
     type: 'CHATBOT_RESPONSE';
-    provider: 'OPENAI' | 'GEMINI';
+    provider: AiProvider;
     summary?: string;
     suggestions?: unknown;
   }): Promise<void> {
@@ -230,13 +256,18 @@ export const chatbotRepository = {
    * Mapper: Database -> DTO
    * IGNORES legacy messages field entirely.
    */
-  mapSessionToResponse(session: PrismaChatbotSession & { messageList?: PrismaChatbotMessage[] }): ChatbotSessionResponse {
-    const relationalMessages: ChatbotMessage[] = (session.messageList || []).map((m: PrismaChatbotMessage) => ({
+  mapSessionToResponse(
+    session: PrismaChatbotSession & { messageList?: PrismaChatbotMessage[] }
+  ): ChatbotSessionResponse {
+    const relationalMessages: ChatbotMessage[] = (
+      session.messageList || []
+    ).map((m: PrismaChatbotMessage) => ({
       id: m.id,
       role: m.role as 'user' | 'assistant',
       content: m.content,
       timestamp: m.createdAt.toISOString(),
-      metadata: (m.metadata as unknown as ChatbotMessage['metadata']) || undefined
+      metadata:
+        (m.metadata as unknown as ChatbotMessage['metadata']) || undefined
     }));
 
     return {

@@ -40,8 +40,7 @@ export const securityMiddleware = [
         imgSrc: ["'self'", 'data:', 'https:'],
         connectSrc: [
           "'self'",
-          'https://api.openai.com',
-          'https://generativelanguage.googleapis.com'
+          'https://api.groq.com'
         ]
       }
     },
@@ -62,14 +61,15 @@ export const securityMiddleware = [
       callback(new Error(`CORS origin not allowed: ${origin}`));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-Id'],
+    exposedHeaders: ['X-Request-Id'],
     credentials: true,
     maxAge: 86400 // 24 hours
   }),
 
   // 3. Request Logging & Limits
-  express.json({ limit: '1mb' }), // Limit JSON body size
-  express.urlencoded({ extended: true, limit: '1mb' }),
+  express.json({ limit: env.REQUEST_BODY_LIMIT }),
+  express.urlencoded({ extended: true, limit: env.REQUEST_BODY_LIMIT }),
 
   // 4. Rate Limiting
   emergencyRateLimiter, // Fallback for Redis outage

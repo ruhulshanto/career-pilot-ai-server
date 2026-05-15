@@ -7,32 +7,44 @@ import { aiProcessingProcessor } from './processors/ai-processing.processor.js';
 import { notificationProcessor } from './processors/notification.processor.js';
 import { analyticsProcessor } from './processors/analytics.processor.js';
 
+let workersInitialized = false;
+
 export const initializeWorkers = (): void => {
+  if (workersInitialized) {
+    return;
+  }
+
   // Register all workers
   workerManager.registerWorker('resume-analysis', resumeAnalysisProcessor, {
     concurrency: 3,
-    removeOnComplete: 50,
-    removeOnFail: 20
+    lockDuration: 120000,
+    removeOnComplete: { count: 50 },
+    removeOnFail: { count: 500 }
   });
 
   workerManager.registerWorker('ai-processing', aiProcessingProcessor, {
-    concurrency: 5,
-    limiter: { max: 10, duration: 1000 }, // Rate limit AI calls
-    removeOnComplete: 100,
-    removeOnFail: 10
+    concurrency: 2,
+    lockDuration: 180000,
+    limiter: { max: 3, duration: 1000 }, // Keep provider requests bounded under slow AI responses
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 500 }
   });
 
   workerManager.registerWorker('notifications', notificationProcessor, {
     concurrency: 10,
-    removeOnComplete: 1000,
-    removeOnFail: 50
+    lockDuration: 60000,
+    removeOnComplete: { count: 1000 },
+    removeOnFail: { count: 500 }
   });
 
   workerManager.registerWorker('analytics', analyticsProcessor, {
     concurrency: 2,
-    removeOnComplete: 200,
-    removeOnFail: 20
+    lockDuration: 60000,
+    removeOnComplete: { count: 200 },
+    removeOnFail: { count: 500 }
   });
+
+  workersInitialized = true;
 };
 
 export const startWorkers = (): void => {
@@ -41,4 +53,5 @@ export const startWorkers = (): void => {
 
 export const stopWorkers = async (): Promise<void> => {
   await workerManager.stopAllWorkers();
+  workersInitialized = false;
 };

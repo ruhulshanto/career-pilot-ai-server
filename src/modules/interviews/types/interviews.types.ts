@@ -1,4 +1,4 @@
-import { AiFeedbackType, ProcessingStatus } from '@prisma/client';
+import { AiFeedbackType, InterviewStatus, ProcessingStatus } from '@prisma/client';
 
 export interface InterviewQuestion {
   questionId: string;
@@ -18,6 +18,7 @@ export interface CreateInterviewSessionRequest {
   roleTarget: string;
   level?: string;
   questionCount?: number;
+  scheduledAt?: string;
 }
 
 export interface SubmitInterviewAnswersRequest {
@@ -38,6 +39,13 @@ export interface InterviewFeedbackResponse {
   strengths?: string[];
   weaknesses?: string[];
   suggestions?: string[];
+  questionFeedback?: Array<{
+    questionId: string;
+    score: number;
+    whatWorked: string[];
+    improve: string[];
+    strongerAnswer: string;
+  }>;
   createdAt: Date;
 }
 
@@ -47,10 +55,13 @@ export interface InterviewSessionResponse {
   title: string;
   roleTarget: string;
   level?: string;
-  status: ProcessingStatus;
+  status: InterviewStatus;
   questions?: InterviewQuestion[];
   transcript?: unknown;
   score?: number;
+  scheduledAt?: Date;
+  startedAt?: Date;
+  completedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   aiFeedbacks: InterviewFeedbackResponse[];
@@ -60,9 +71,30 @@ export interface InterviewSessionResponse {
 export interface GetInterviewsQuery {
   page?: number;
   limit?: number;
-  status?: ProcessingStatus;
+  status?: InterviewStatus;
   roleTarget?: string;
   search?: string;
   sortBy?: 'createdAt' | 'updatedAt' | 'title';
   sortOrder?: 'asc' | 'desc';
+}
+
+export interface GetInterviewSlotsQuery {
+  date?: string;
+  days?: number;
+  roleTarget?: string;
+  level?: string;
+  timezoneOffsetMinutes?: number;
+  now?: string;
+}
+
+export interface InterviewSlot {
+  availabilityId?: string;
+  startsAt: string;
+  endsAt: string;
+  label: string;
+  available: boolean;
+  capacity?: number;
+  remainingCapacity?: number;
+  roleTarget?: string;
+  level?: string;
 }

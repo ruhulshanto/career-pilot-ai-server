@@ -8,6 +8,7 @@ import { asyncHandler } from '@shared/utils/async-handler.js';
 import { StatusCodes } from 'http-status-codes';
 import type {
   CreateInterviewSessionRequest,
+  GetInterviewSlotsQuery,
   GetInterviewsQuery,
   SubmitInterviewAnswersRequest
 } from '../types/interviews.types.js';
@@ -25,6 +26,18 @@ export const startInterview = asyncHandler(
     return res
       .status(StatusCodes.CREATED)
       .json(apiResponse('Interview session created', interviewSession));
+  }
+);
+
+export const getInterviewSlots = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const query: GetInterviewSlotsQuery = req.query;
+    const slots = await interviewsService.getAvailableSlots(userId, query);
+
+    return res
+      .status(StatusCodes.OK)
+      .json(apiResponse('Interview slots retrieved successfully', slots));
   }
 );
 
@@ -94,5 +107,18 @@ export const getInterviewById = asyncHandler(
           interviewSession
         )
       );
+  }
+);
+
+export const cancelScheduledInterview = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const { id } = req.params as { id: string };
+
+    await interviewsService.cancelScheduledInterview(userId, id);
+
+    return res
+      .status(StatusCodes.OK)
+      .json(apiResponse('Scheduled interview cancelled successfully', null));
   }
 );

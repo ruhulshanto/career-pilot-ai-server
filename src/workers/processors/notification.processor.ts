@@ -1,7 +1,8 @@
 import { logger } from '@/logging/logger.js';
 import type { JobProcessor } from '@queues/types.js';
-import { emailService } from '@shared/utils/email.service.js';
+import { emailService } from '@shared/email/email.service.js';
 import { prisma } from '@config/prisma.js';
+import { notificationsService } from '@modules/notifications/services/notifications.service.js';
 
 export const notificationProcessor: JobProcessor = async (job) => {
   logger.info({ jobId: job.id }, 'Starting notification processing');
@@ -11,9 +12,10 @@ export const notificationProcessor: JobProcessor = async (job) => {
       event: string;
       data: Record<string, any>;
     };
+    const payload = data ?? (job.data as Record<string, any>);
 
     if (job.name === 'send-email') {
-      const { userId, title, message } = data;
+      const { userId, title, message } = payload;
 
       // 1. Get user email
       const user = await prisma.user.findUnique({
@@ -29,6 +31,41 @@ export const notificationProcessor: JobProcessor = async (job) => {
       await emailService.sendNotificationEmail(user.email, title, message);
 
       logger.info({ jobId: job.id, userId, email: user.email }, 'Notification email sent');
+    }
+
+    if (job.name === 'scan-interview-reminders') {
+      return {
+        success: true,
+        data: await notificationsService.runInterviewReminderScan()
+      };
+    }
+
+    if (job.name === 'scan-roadmap-reminders') {
+      return {
+        success: true,
+        data: await notificationsService.runRoadmapReminderScan()
+      };
+    }
+
+    if (job.name === 'scan-interview-feedback') {
+      return {
+        success: true,
+        data: await notificationsService.runInterviewFeedbackReminderScan()
+      };
+    }
+
+    if (job.name === 'scan-low-readiness') {
+      return {
+        success: true,
+        data: await notificationsService.runLowReadinessReminderScan()
+      };
+    }
+
+    if (job.name === 'weekly-mentoring-reminders') {
+      return {
+        success: true,
+        data: await notificationsService.runWeeklyMentoringReminderScan()
+      };
     }
 
     return {

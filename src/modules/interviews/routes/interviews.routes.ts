@@ -1,12 +1,15 @@
 import { authenticate } from '@middlewares/auth.middleware.js';
 import {
+  cancelScheduledInterview,
   getInterviewById,
+  getInterviewSlots,
   getInterviews,
   startInterview,
   submitInterviewAnswers
 } from '@modules/interviews/controllers/interviews.controller.js';
 import {
   getInterviewsQuerySchema,
+  getInterviewSlotsQuerySchema,
   interviewIdParamSchema,
   startInterviewSchema,
   submitInterviewAnswersSchema
@@ -21,6 +24,12 @@ router.post(
   authenticate,
   validateRequest({ body: startInterviewSchema }),
   startInterview
+);
+router.get(
+  '/slots',
+  authenticate,
+  validateRequest({ query: getInterviewSlotsQuerySchema }),
+  getInterviewSlots
 );
 router.post(
   '/:id/answers',
@@ -42,6 +51,12 @@ router.get(
   authenticate,
   validateRequest({ params: interviewIdParamSchema }),
   getInterviewById
+);
+router.delete(
+  '/:id',
+  authenticate,
+  validateRequest({ params: interviewIdParamSchema }),
+  cancelScheduledInterview
 );
 
 export default router;

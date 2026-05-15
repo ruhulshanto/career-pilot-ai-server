@@ -1,6 +1,12 @@
-import { addJobWithContext, getAnalyticsQueue } from '@queues/index.js';
+import {
+  addJobWithContext,
+  createSafeJobId,
+  getAnalyticsQueue
+} from '@queues/index.js';
+import { getConfiguredPrismaAiProvider } from '@config/ai.js';
 import { getRedis } from '@config/redis.js';
 import { chatbotRepository } from '@modules/chatbot/repositories/chatbot.repository.js';
+import { careerContextService } from '@modules/career/services/career-context.service.js';
 import { createPaginationMeta } from '@shared/helpers/pagination.js';
 import { ApiError } from '@shared/errors/api-error.js';
 import { ChatbotAiService } from './chatbot-ai.service.js';
@@ -8,10 +14,13 @@ import type {
   ChatbotSessionResponse,
   ChatbotContext,
   CreateSessionRequest,
+  ChatbotResponsePayload,
   SendMessageRequest,
   GetSessionsQuery,
   GetMessagesQuery
 } from '../types/chatbot.types.js';
+
+type PublicChatMessage = Pick<ChatbotContext['recentMessages'][number], 'role' | 'content'>;
 
 /**
  * Chatbot Service - REBUILT
@@ -19,6 +28,45 @@ import type {
  * Source of Truth: Relational Database (via Repository).
  */
 export const chatbotService = {
+  /**
+   * Generate a lightweight public assistant reply without creating sessions,
+   * database messages, queue jobs, Redis streams, or analytics records.
+   */
+  async sendPublicMessage(payload: {
+    content: string;
+    recentMessages?: PublicChatMessage[];
+  }): Promise<ChatbotResponsePayload> {
+    const context = ChatbotAiService.createInitialContext({
+      name: 'Homepage visitor',
+      role: 'Career explorer',
+      level: 'General'
+    });
+
+    context.recentMessages = (payload.recentMessages ?? []).slice(-6);
+    context.careerContext = {
+      nextAction: {
+        label:
+          'Create a free Career Pilot AI workspace to save chat history, resume analysis, roadmaps, and interview practice.'
+      }
+    };
+    context.sessionMetadata = {
+      ...context.sessionMetadata,
+      public: true,
+      persistence: 'none'
+    };
+
+    const publicSessionId = `public_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+    const aiService = new ChatbotAiService();
+
+    return aiService.generatePublicResponse(
+      payload.content,
+      publicSessionId,
+      context
+    );
+  },
+
   /**
    * Create a new chatbot session
    */
@@ -29,6 +77,9 @@ export const chatbotService = {
     const initialContext = ChatbotAiService.createInitialContext(
       payload.context?.userProfile
     );
+    initialContext.careerContext = (await careerContextService.getCareerContext(
+      userId
+    )) as unknown as Record<string, any>;
 
     const session = await chatbotRepository.createSession({
       userId,
@@ -45,7 +96,10 @@ export const chatbotService = {
       }
     });
 
-    const hydratedSession = await chatbotRepository.getSessionById(session.id, userId);
+    const hydratedSession = await chatbotRepository.getSessionById(
+      session.id,
+      userId
+    );
     if (!hydratedSession) {
       throw new ApiError(500, 'Failed to create and hydrate chatbot session');
     }
@@ -76,17 +130,37 @@ export const chatbotService = {
     const context =
       (session.context as unknown as ChatbotContext) ||
       ChatbotAiService.createInitialContext();
-      
+    context.careerContext = (await careerContextService.getCareerContext(
+      userId
+    )) as unknown as Record<string, any>;
+
     // Async hand-off to AI worker
-    await addJobWithContext('ai-processing', 'generate-chatbot-response', {
-      task: 'generate-chatbot-response',
-      data: {
-        sessionId,
-        userId,
-        userMessage: payload.content,
-        context
+    await addJobWithContext(
+      'ai-processing',
+      'generate-chatbot-response',
+      {
+        task: 'generate-chatbot-response',
+        data: {
+          sessionId,
+          userId,
+          userMessage: payload.content,
+          context
+        }
+      },
+      {
+        jobId: createSafeJobId(
+          'chatbot',
+          'response',
+          sessionId,
+          userMessage.id
+        ),
+        attempts: 2,
+        backoff: {
+          type: 'exponential',
+          delay: 2000
+        }
       }
-    });
+    );
 
     // Analytics
     await getAnalyticsQueue().add('analytics-job', {
@@ -114,7 +188,7 @@ export const chatbotService = {
 
     return {
       data: sessions,
-      pagination: createPaginationMeta(total, page, limit)
+      pagination: createPaginationMeta(page, limit, total)
     };
   },
 
@@ -154,7 +228,7 @@ export const chatbotService = {
 
     return {
       data: messages,
-      pagination: createPaginationMeta(total, page, limit)
+      pagination: createPaginationMeta(page, limit, total)
     };
   },
 
@@ -209,13 +283,17 @@ export const chatbotService = {
   /**
    * Worker callback for AI response
    */
-  async handleAiResponse(sessionId: string, userId: string, aiResponse: {
-    messageId: string;
-    content: string;
-    timestamp: string;
-    metadata?: any;
-    context?: ChatbotContext;
-  }) {
+  async handleAiResponse(
+    sessionId: string,
+    userId: string,
+    aiResponse: {
+      messageId: string;
+      content: string;
+      timestamp: string;
+      metadata?: any;
+      context?: ChatbotContext;
+    }
+  ) {
     // Save assistant message to DB
     await chatbotRepository.addMessage(sessionId, {
       role: 'assistant',
@@ -225,14 +303,22 @@ export const chatbotService = {
 
     // Real-time broadcast
     const redis = getRedis();
+    const channel = `session:${sessionId}:messages`;
+    const assistantMessage = {
+      id: aiResponse.messageId,
+      role: 'assistant',
+      content: aiResponse.content,
+      timestamp: aiResponse.timestamp,
+      metadata: aiResponse.metadata
+    };
+    await redis.publish(channel, JSON.stringify(assistantMessage));
     await redis.publish(
-      `session:${sessionId}:messages`,
+      channel,
       JSON.stringify({
-        id: aiResponse.messageId,
-        role: 'assistant',
-        content: aiResponse.content,
-        timestamp: aiResponse.timestamp,
-        metadata: aiResponse.metadata
+        type: 'done',
+        sessionId,
+        messageId: aiResponse.messageId,
+        timestamp: aiResponse.timestamp
       })
     );
 
@@ -249,7 +335,8 @@ export const chatbotService = {
       userId,
       chatbotSessionId: sessionId,
       type: 'CHATBOT_RESPONSE',
-      provider: aiResponse.metadata?.provider || 'OPENAI',
+      provider:
+        aiResponse.metadata?.provider || getConfiguredPrismaAiProvider(),
       suggestions: aiResponse.context
     });
   }

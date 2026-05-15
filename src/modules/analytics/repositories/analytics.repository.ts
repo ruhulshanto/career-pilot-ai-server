@@ -1,23 +1,71 @@
 import { prisma } from '@config/prisma.js';
-import { AnalyticsEventType, ProcessingStatus } from '@prisma/client';
+import { JobApplicationStatus, ProcessingStatus } from '@prisma/client';
 
 export const analyticsRepository = {
   /**
    * Get total counts for dashboard summary
    */
   async getCounts(userId: string) {
-    const [resumes, interviews, roadmaps, chatbots] = await Promise.all([
+    const [
+      resumes,
+      resumesAnalyzed,
+      roadmaps,
+      interviews,
+      completedInterviews,
+      chatbots,
+      activeApplications,
+      totalApplications,
+      aiUsageCount,
+      activeGoals
+    ] = await Promise.all([
       prisma.resume.count({ where: { userId, deletedAt: null } }),
-      prisma.interviewSession.count({ where: { userId, deletedAt: null } }),
+      prisma.aiFeedback.count({
+        where: {
+          userId,
+          type: 'RESUME_ANALYSIS',
+          status: ProcessingStatus.COMPLETED,
+          resume: { deletedAt: null }
+        }
+      }),
       prisma.careerRoadmap.count({ where: { userId, deletedAt: null } }),
-      prisma.chatbotSession.count({ where: { userId, deletedAt: null } })
+      prisma.interviewSession.count({ where: { userId, deletedAt: null } }),
+      prisma.interviewSession.count({
+        where: {
+          userId,
+          deletedAt: null,
+          status: 'COMPLETED'
+        }
+      }),
+      prisma.chatbotSession.count({ where: { userId, deletedAt: null } }),
+      prisma.jobApplication.count({
+        where: {
+          userId,
+          status: {
+            in: [
+              JobApplicationStatus.SAVED,
+              JobApplicationStatus.APPLIED,
+              JobApplicationStatus.INTERVIEW_SCHEDULED,
+              JobApplicationStatus.OFFER
+            ]
+          }
+        }
+      }),
+      prisma.jobApplication.count({ where: { userId } }),
+      prisma.aiFeedback.count({ where: { userId } }),
+      prisma.careerGoal.count({ where: { userId, status: { not: 'ARCHIVED' } } })
     ]);
 
     return {
       totalResumes: resumes,
+      resumesAnalyzed,
       totalInterviews: interviews,
+      completedInterviews,
       totalRoadmaps: roadmaps,
-      totalChatbotSessions: chatbots
+      totalChatbotSessions: chatbots,
+      activeApplications,
+      totalApplications,
+      aiUsageCount,
+      activeGoals
     };
   },
 
@@ -26,10 +74,53 @@ export const analyticsRepository = {
    */
   async getAverageInterviewScore(userId: string) {
     const aggregate = await prisma.interviewSession.aggregate({
-      where: { userId, status: 'COMPLETED' },
+      where: { userId, deletedAt: null, status: 'COMPLETED', score: { not: null } },
       _avg: { score: true }
     });
     return aggregate._avg.score || 0;
+  },
+
+  async getAverageResumeScore(userId: string) {
+    const aggregate = await prisma.aiFeedback.aggregate({
+      where: {
+        userId,
+        type: 'RESUME_ANALYSIS',
+        status: ProcessingStatus.COMPLETED,
+        score: { not: null },
+        resume: { deletedAt: null }
+      },
+      _avg: { score: true }
+    });
+    return aggregate._avg.score || 0;
+  },
+
+  async getRoadmapCompletion(userId: string) {
+    const [roadmapAggregate, milestoneCounts] = await Promise.all([
+      prisma.careerRoadmap.aggregate({
+        where: { userId, deletedAt: null },
+        _avg: { progress: true }
+      }),
+      prisma.roadmapMilestone.groupBy({
+        by: ['status'],
+        where: {
+          roadmap: { userId, deletedAt: null }
+        },
+        _count: { _all: true }
+      })
+    ]);
+
+    const totalMilestones = milestoneCounts.reduce(
+      (sum, item) => sum + item._count._all,
+      0
+    );
+    const completedMilestones =
+      milestoneCounts.find((item) => item.status === 'COMPLETED')?._count._all ?? 0;
+
+    if (totalMilestones > 0) {
+      return Math.round((completedMilestones / totalMilestones) * 100);
+    }
+
+    return Math.round(roadmapAggregate._avg.progress ?? 0);
   },
 
   /**
@@ -42,32 +133,14 @@ export const analyticsRepository = {
         provider: true,
         type: true,
         promptTokens: true,
-        completionTokens: true
+        completionTokens: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true
       }
     });
 
-    const totalRequests = feedbacks.length;
-    let totalTokens = 0;
-    const providerDistribution = { openai: 0, gemini: 0 };
-    const usageByFeature: Record<string, number> = {};
-
-    feedbacks.forEach((f) => {
-      totalTokens += (f.promptTokens || 0) + (f.completionTokens || 0);
-      
-      const provider = f.provider.toLowerCase();
-      if (provider === 'openai') providerDistribution.openai++;
-      else if (provider === 'gemini') providerDistribution.gemini++;
-
-      usageByFeature[f.type] = (usageByFeature[f.type] || 0) + 1;
-    });
-
-    return {
-      totalRequests,
-      totalTokens,
-      providerDistribution,
-      usageByFeature,
-      averageResponseTime: 0 // Placeholder
-    };
+    return feedbacks;
   },
 
   /**
@@ -75,16 +148,42 @@ export const analyticsRepository = {
    */
   async getInterviewTrends(userId: string) {
     const interviews = await prisma.interviewSession.findMany({
-      where: { userId, status: 'COMPLETED', score: { not: null } },
-      orderBy: { createdAt: 'asc' },
+      where: { userId, deletedAt: null, status: 'COMPLETED', score: { not: null } },
+      orderBy: { completedAt: 'desc' },
       take: 10,
-      select: { createdAt: true, score: true }
+      select: { createdAt: true, completedAt: true, score: true }
     });
 
-    return interviews.map((i) => ({
-      date: i.createdAt.toISOString().split('T')[0],
+    return interviews.reverse().map((i) => ({
+      date: (i.completedAt ?? i.createdAt).toISOString().split('T')[0],
       score: i.score || 0
     }));
+  },
+
+  async getCompletedInterviewScores(userId: string) {
+    return prisma.interviewSession.findMany({
+      where: { userId, deletedAt: null, status: 'COMPLETED', score: { not: null } },
+      orderBy: { completedAt: 'asc' },
+      select: { score: true, completedAt: true, createdAt: true }
+    });
+  },
+
+  async getInterviewSkillSignals(userId: string) {
+    return prisma.aiFeedback.findMany({
+      where: {
+        userId,
+        type: 'INTERVIEW_FEEDBACK',
+        status: ProcessingStatus.COMPLETED
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        strengths: true,
+        weaknesses: true,
+        suggestions: true,
+        rawResponse: true
+      }
+    });
   },
 
   /**
@@ -103,6 +202,28 @@ export const analyticsRepository = {
     });
 
     return distribution;
+  },
+
+  async getResumeSubmissions(userId: string) {
+    return prisma.resume.findMany({
+      where: { userId, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true }
+    });
+  },
+
+  async getResumeScoreHistory(userId: string) {
+    return prisma.aiFeedback.findMany({
+      where: {
+        userId,
+        type: 'RESUME_ANALYSIS',
+        status: ProcessingStatus.COMPLETED,
+        score: { not: null },
+        resume: { deletedAt: null }
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true, score: true }
+    });
   },
 
   /**

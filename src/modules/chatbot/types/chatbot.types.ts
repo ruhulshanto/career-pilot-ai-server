@@ -11,6 +11,11 @@ export interface ChatbotMessage {
   metadata?: {
     tokens?: number;
     provider?: AiProvider;
+    confidence?: number;
+    fallback?: boolean;
+    reason?: string;
+    retryAfterMs?: number;
+    structured?: Record<string, any>;
   };
 }
 
@@ -27,6 +32,7 @@ export interface ChatbotContext {
     role?: string;
     level?: string;
   };
+  careerContext?: Record<string, any>;
   conversationPhase: 'greeting' | 'exploration' | 'advice' | 'action_planning';
   sessionMetadata?: Record<string, any>;
 }
@@ -83,6 +89,10 @@ export interface ChatbotResponsePayload {
     provider?: AiProvider;
     tokens?: number;
     confidence?: number;
+    fallback?: boolean;
+    reason?: string;
+    retryAfterMs?: number;
+    structured?: Record<string, any>;
   };
 }
 

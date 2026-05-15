@@ -1,25 +1,68 @@
 import { promptManager } from './manager.js';
-import type { AiModel } from '../types.js';
+import { getRoadmapAiModel } from '@config/ai.js';
 
-const defaultRoadmapModel: AiModel = {
-  provider: 'openai',
-  model: 'gpt-4',
-  temperature: 0.7
+const defaultRoadmapModel = {
+  ...getRoadmapAiModel(),
+  maxTokens: 4096
 };
 
 promptManager.register({
   id: 'career-roadmap-generation',
   name: 'Career Roadmap Generation',
   description:
-    'Generate a structured career roadmap with milestones, skills, and personalized recommendations.',
-  template: `You are an expert career coach. Generate a structured career roadmap for a candidate targeting the role of ${'${targetRole}'} at the current level ${'${currentLevel}'}. Use the candidate background: ${'${experienceSummary}'}. Target industry: ${'${industry}'}. The candidate wants to achieve these goals: ${'${careerGoals}'}. Return only valid JSON with the following structure:\n{\n  "milestones": [\n    {"id": "m1", "title": "...", "description": "...", "progress": 0, "status": "pending", "recommendation": "..."}\n  ],\n  "skills": [\n    {"name": "...", "currentLevel": "...", "targetLevel": "...", "progress": 0, "importance": "..."}\n  ],\n  "timeline": {\n    "phases": [\n      {"title": "...", "durationMonths": 0, "milestones": ["m1"]}\n    ],\n    "recommendations": ["..."]\n  }\n}`,
+    'Generate a structured, personalized AI career roadmap from resume analysis and user goals.',
+  template: `Create a concise, personalized career roadmap as strict JSON.
+
+Profile:
+- Target role: ${'${targetRole}'}
+- Current level: ${'${currentLevel}'}
+- Preferred path: ${'${preferredPath}'}
+- Industry: ${'${industry}'}
+- Goals: ${'${careerGoals}'}
+- Resume summary: ${'${resumeSummary}'}
+- Resume excerpt: ${'${resumeText}'}
+
+Signals:
+- Strengths: ${'${strengths}'}
+- Weaknesses: ${'${weaknesses}'}
+- Missing skills: ${'${missingSkills}'}
+- Improvements: ${'${improvementSuggestions}'}
+- Keyword gaps: ${'${keywordGaps}'}
+- Next actions: ${'${recommendedNextActions}'}
+
+Rules: JSON only. No markdown or code fences. No newline characters inside string values. Keep strings under 160 chars. Ground every recommendation in the profile/signals. Use progress 0. Use milestone IDs "m1", "m2", etc.
+
+Return exactly:
+{
+  "title": "string",
+  "targetRole": "string",
+  "currentLevel": "string",
+  "estimatedDurationMonths": 6,
+  "summary": "string",
+  "milestones": [{"id":"m1","title":"string","description":"string","durationWeeks":4,"requiredSkills":["string"],"recommendedResources":["string"],"projectSuggestions":["string"],"successCriteria":["string"],"progress":0,"status":"pending"}],
+  "projects": [{"title":"string","description":"string","difficulty":"beginner|intermediate|advanced","estimatedWeeks":4,"technologies":["string"],"skillsDemonstrated":["string"],"portfolioValue":"string"}],
+  "skills": [{"name":"string","category":"string","currentLevel":"string","targetLevel":"string","priority":"low|medium|high|critical","progress":0,"status":"not-started"}],
+  "certifications": ["string"],
+  "learningRecommendations": ["string"],
+  "learningGoals": [{"title":"string","description":"string","resources":["string"],"progress":0,"status":"pending"}],
+  "timeline": {"phases":[{"title":"string","durationMonths":1,"milestones":["m1"]}],"recommendations":["string"]}
+}`,
   variables: [
     'targetRole',
     'currentLevel',
-    'experienceSummary',
+    'preferredPath',
     'industry',
-    'careerGoals'
+    'careerGoals',
+    'resumeSummary',
+    'resumeText',
+    'strengths',
+    'weaknesses',
+    'missingSkills',
+    'improvementSuggestions',
+    'keywordGaps',
+    'recommendedNextActions'
   ],
   model: defaultRoadmapModel,
-  systemMessage: 'You are an AI career coach that returns structured JSON only.'
+  systemMessage:
+    'You are an AI career mentor. Return strict JSON only, grounded in the provided user data.'
 });

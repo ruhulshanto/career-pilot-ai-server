@@ -1,4 +1,20 @@
 import { describe, it, expect, vi } from 'vitest';
+
+const emailMocks = vi.hoisted(() => ({
+  sendVerificationEmail: vi.fn(),
+  sendPasswordResetEmail: vi.fn(),
+  sendNotificationEmail: vi.fn(),
+  sendEmail: vi.fn()
+}));
+
+vi.mock('@shared/email/email.service.js', () => ({
+  emailService: emailMocks
+}));
+
+vi.mock('@shared/utils/email.service.js', () => ({
+  emailService: emailMocks
+}));
+
 import { authService } from '@modules/auth/services/auth.service.js';
 import { prismaMock } from '../mocks/prisma.mock.js';
 import bcrypt from 'bcryptjs';
@@ -32,9 +48,26 @@ describe('AuthService', () => {
         deletedAt: null,
         avatarUrl: null,
         headline: null,
+        bio: null,
+        targetRole: null,
         location: null,
+        socialLinks: null,
+        isPublicProfile: false,
         lastLoginAt: null
+      } as any);
+      prismaMock.emailVerificationToken.deleteMany.mockResolvedValue({ count: 0 });
+      prismaMock.emailVerificationToken.create.mockResolvedValue({} as any);
+      prismaMock.accountSession.create.mockResolvedValue({
+        id: 'session_123',
+        userId: 'user_123',
+        userAgent: null,
+        ipAddress: null,
+        lastSeenAt: new Date(),
+        expiresAt: new Date(Date.now() + 1000),
+        revokedAt: null,
+        createdAt: new Date()
       });
+      prismaMock.refreshToken.create.mockResolvedValue({} as any);
 
       const result = await authService.register(userData);
 
@@ -54,7 +87,7 @@ describe('AuthService', () => {
 
       prismaMock.user.findUnique.mockResolvedValue({ id: 'existing' } as any);
 
-      await expect(authService.register(userData)).rejects.toThrow('Email already taken');
+      await expect(authService.register(userData)).rejects.toThrow('Email already in use');
     });
   });
 });

@@ -27,6 +27,27 @@ export const sendMessageSchema = z.object({
   context: z.record(z.any()).optional()
 });
 
+export const publicMessageSchema = z.object({
+  content: z
+    .string()
+    .trim()
+    .min(2, 'Message must be at least 2 characters')
+    .max(1200, 'Message is too long for the public assistant'),
+  recentMessages: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z
+          .string()
+          .trim()
+          .min(1)
+          .max(1000)
+      })
+    )
+    .max(6, 'Public assistant context is limited to the latest 6 messages')
+    .optional()
+});
+
 export const getSessionsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(50).default(10),
@@ -48,6 +69,7 @@ export const updateSessionSchema = z.object({
 // Type exports for use in services
 export type CreateSessionInput = z.infer<typeof createSessionSchema>;
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
+export type PublicMessageInput = z.infer<typeof publicMessageSchema>;
 export type GetSessionsInput = z.infer<typeof getSessionsQuerySchema>;
 export type GetMessagesInput = z.infer<typeof getMessagesQuerySchema>;
 export type UpdateSessionInput = z.infer<typeof updateSessionSchema>;

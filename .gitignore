@@ -6,6 +6,10 @@
 # Runtime directories
 node_modules/
 dist/
+uploads/
+.pnpm-store/
+.prisma/
+*.tsbuildinfo
 
 # Logs
 npm-debug.log*
