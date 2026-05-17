@@ -115,7 +115,7 @@ export const authService = {
     return { ...tokens, user: sanitizeUser(user) };
   },
 
-  async demoLogin(role: 'USER' | 'ADMIN' | 'COACH' | 'MENTOR', context: AuthRequestContext = {}) {
+  async demoLogin(role: 'USER' | 'ADMIN' | 'MENTOR', context: AuthRequestContext = {}) {
     if (!env.DEMO_LOGIN_ENABLED) {
       throw new ApiError(403, 'Demo login is disabled for this environment', {
         code: 'DEMO_LOGIN_DISABLED'

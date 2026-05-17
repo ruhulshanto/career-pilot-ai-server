@@ -24,14 +24,14 @@ const userSelect = {
 export const mentorRepository = {
   findMentorById(id: string) {
     return db.user.findFirst({
-      where: { id, role: { in: ['MENTOR', 'COACH', 'ADMIN'] }, deletedAt: null },
+      where: { id, role: { in: ['MENTOR', 'ADMIN'] }, deletedAt: null },
       select: userSelect
     });
   },
 
   findFirstAvailableMentor() {
     return db.user.findFirst({
-      where: { role: { in: ['MENTOR', 'COACH'] }, isActive: true, deletedAt: null },
+      where: { role: 'MENTOR', isActive: true, deletedAt: null },
       orderBy: [{ mentorCompletedReviews: 'asc' }, { createdAt: 'asc' }],
       select: userSelect
     });

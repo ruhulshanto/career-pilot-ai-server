@@ -608,7 +608,6 @@ model AnalyticsEvent {
 enum UserRole {
   USER
   ADMIN
-  COACH
   MENTOR
 }
 

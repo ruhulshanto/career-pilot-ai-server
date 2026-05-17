@@ -70,42 +70,29 @@ export const authRepository = {
       select: authUserSelect
     });
   },
-  async findDemoUserByRole(role: 'USER' | 'ADMIN' | 'COACH' | 'MENTOR') {
+  async findDemoUserByRole(role: 'USER' | 'ADMIN' | 'MENTOR') {
     const baseWhere = {
       isDemo: true,
       isActive: true,
       deletedAt: null
     };
 
-    const user =
-      role === 'MENTOR'
-        ? await prisma.user.findFirst({
-            where: {
-              role,
-              ...baseWhere
-            },
-            select: authUserSelect
-          }).catch(() => null)
-        : await prisma.user.findFirst({
-            where: {
-              role,
-              ...baseWhere
-            },
-            select: authUserSelect
-          });
+    const user = await prisma.user.findFirst({
+      where: {
+        role,
+        ...baseWhere
+      },
+      select: authUserSelect,
+      orderBy: { createdAt: 'asc' }
+    });
 
-    if (user || (role !== 'MENTOR' && role !== 'COACH')) {
+    if (user) {
       return user;
     }
 
-    const fallbackRole = role === 'MENTOR' ? 'COACH' : 'MENTOR';
-
     return prisma.user.findFirst({
-      where: {
-        role: fallbackRole,
-        ...baseWhere
-      },
-      select: authUserSelect
+      where: { role: 'USER' },
+      orderBy: { createdAt: 'asc' }
     });
   },
   markEmailVerified(userId: string) {

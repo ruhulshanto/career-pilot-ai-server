@@ -4,7 +4,7 @@ import { notificationsService } from '@modules/notifications/services/notificati
 import { mentorRepository } from '../repositories/mentor.repository.js';
 import type { UserRole } from '@constants/roles.js';
 
-const mentorRoles: UserRole[] = ['MENTOR', 'COACH', 'ADMIN'];
+const mentorRoles: UserRole[] = ['MENTOR', 'ADMIN'];
 
 const displayName = (user?: { firstName?: string; lastName?: string; username?: string } | null) =>
   [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.username || 'Mentor';

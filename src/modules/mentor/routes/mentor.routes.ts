@@ -25,7 +25,7 @@ router.post(
 );
 router.patch(
   '/reviews/:id',
-  authorize('MENTOR', 'COACH', 'ADMIN'),
+  authorize('MENTOR', 'ADMIN'),
   validateRequest({ params: mentorIdParamSchema, body: updateMentorReviewSchema }),
   mentorController.updateReview
 );
@@ -43,11 +43,11 @@ router.post(
 );
 router.patch(
   '/sessions/:id',
-  authorize('MENTOR', 'COACH', 'ADMIN'),
+  authorize('MENTOR', 'ADMIN'),
   validateRequest({ params: mentorIdParamSchema, body: updateMentorSessionSchema }),
   mentorController.updateSession
 );
 
-router.get('/dashboard', authorize('MENTOR', 'COACH', 'ADMIN'), mentorController.getDashboard);
+router.get('/dashboard', authorize('MENTOR', 'ADMIN'), mentorController.getDashboard);
 
 export default router;

@@ -14,7 +14,7 @@ export const loginSchema = z.object({
 });
 
 export const demoLoginSchema = z.object({
-  role: z.enum(['USER', 'ADMIN', 'COACH', 'MENTOR'])
+  role: z.enum(['USER', 'ADMIN', 'MENTOR'])
 });
 
 export const verifyEmailSchema = z.object({
