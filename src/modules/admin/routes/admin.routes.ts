@@ -4,6 +4,9 @@ import {
   getAdminDashboard,
   getAdminSystem,
   getAdminUsers,
+  getAdminUserDetail,
+  getAdminUserActivity,
+  updateAdminUserStatus,
   retryFailedQueueJobs
 } from '@modules/admin/controllers/admin.controller.js';
 
@@ -14,6 +17,9 @@ router.use(authenticate, authorize('ADMIN'));
 router.get('/dashboard', getAdminDashboard);
 router.get('/system', getAdminSystem);
 router.get('/users', getAdminUsers);
+router.get('/users/:id', getAdminUserDetail);
+router.get('/users/:id/activity', getAdminUserActivity);
+router.patch('/users/:id/suspend', updateAdminUserStatus);
 router.post('/system/queues/:queueName/retry-failed', retryFailedQueueJobs);
 
 router.get('/security/health', (_req, res) => {

@@ -1,4 +1,5 @@
 import { adminRepository } from '@modules/admin/repositories/admin.repository.js';
+import { authRepository } from '@modules/auth/repositories/auth.repository.js';
 import { systemHealthService } from '@/system/system-health.service.js';
 import type { QueueName } from '@queues/types.js';
 
@@ -56,6 +57,23 @@ export const adminService = {
 
   async getUsers(params: { page: number; limit: number; search?: string; role?: string; status?: string }) {
     return adminRepository.getUsers(params);
+  },
+
+  async getUserDetail(id: string) {
+    return adminRepository.getUserDetail(id);
+  },
+
+  async getUserActivityLogs(userId: string) {
+    return adminRepository.getUserActivityLogs(userId);
+  },
+
+  async updateUserStatus(userId: string, isActive: boolean, adminId: string) {
+    const user = await adminRepository.updateUserStatus(userId, isActive, adminId);
+    if (!isActive) {
+      // Immediately revoke all active sessions and refresh tokens for the suspended user
+      await authRepository.revokeOtherSessions(userId).catch(() => null);
+    }
+    return user;
   },
 
   async retryFailedJobs(queueName: QueueName, limit?: number) {

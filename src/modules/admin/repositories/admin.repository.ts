@@ -196,7 +196,11 @@ export const adminRepository = {
       switch (status) {
         case 'active':
           where.deletedAt = null;
-          where.suspendedAt = null; // Assuming we might add suspendedAt later, or just check deletedAt
+          where.isActive = true;
+          break;
+        case 'suspended':
+          where.deletedAt = null;
+          where.isActive = false;
           break;
         case 'deleted':
           where.deletedAt = { not: null };
@@ -210,7 +214,6 @@ export const adminRepository = {
           break;
       }
     } else {
-      // By default, exclude deleted users unless status is explicitly requested
       where.deletedAt = null;
     }
 
@@ -230,6 +233,7 @@ export const adminRepository = {
           avatarUrl: true,
           role: true,
           emailVerifiedAt: true,
+          isActive: true,
           lastLoginAt: true,
           createdAt: true,
           deletedAt: true
@@ -238,6 +242,111 @@ export const adminRepository = {
     ]);
 
     return { total, users, page, limit };
+  },
+
+  async getUserDetail(id: string) {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+        role: true,
+        headline: true,
+        bio: true,
+        location: true,
+        currentCompany: true,
+        currentPosition: true,
+        emailVerifiedAt: true,
+        isActive: true,
+        lastLoginAt: true,
+        createdAt: true,
+        deletedAt: true,
+        _count: {
+          select: {
+            resumes: { where: { deletedAt: null } },
+            careerRoadmaps: { where: { deletedAt: null } },
+            interviewSessions: { where: { deletedAt: null } },
+            chatbotSessions: { where: { deletedAt: null } }
+          }
+        }
+      }
+    });
+
+    if (!user) return null;
+
+    const aiUsage = await prisma.aiFeedback.aggregate({
+      where: { userId: id },
+      _count: { _all: true },
+      _sum: { promptTokens: true, completionTokens: true }
+    });
+
+    return {
+      ...user,
+      aiUsage: {
+        totalRequests: aiUsage._count._all,
+        totalTokens: (aiUsage._sum.promptTokens ?? 0) + (aiUsage._sum.completionTokens ?? 0)
+      }
+    };
+  },
+
+  async getUserActivityLogs(userId: string) {
+    const [events, sessions] = await Promise.all([
+      prisma.analyticsEvent.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+        select: {
+          id: true,
+          eventType: true,
+          eventName: true,
+          metadata: true,
+          ipAddress: true,
+          userAgent: true,
+          createdAt: true
+        }
+      }),
+      prisma.accountSession.findMany({
+        where: { userId },
+        orderBy: { lastSeenAt: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          userAgent: true,
+          ipAddress: true,
+          lastSeenAt: true,
+          createdAt: true,
+          revokedAt: true
+        }
+      })
+    ]);
+
+    return { events, sessions };
+  },
+
+  async updateUserStatus(userId: string, isActive: boolean, adminId: string) {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { isActive },
+      select: { id: true, email: true, isActive: true }
+    });
+
+    // Log the admin action
+    await prisma.analyticsEvent.create({
+      data: {
+        userId: adminId,
+        eventType: 'ADMIN',
+        eventName: isActive ? 'USER_RESTORED' : 'USER_SUSPENDED',
+        entityType: 'USER',
+        entityId: userId,
+        metadata: { targetEmail: user.email }
+      }
+    });
+
+    return user;
   },
 
   async getRecentFailures() {
