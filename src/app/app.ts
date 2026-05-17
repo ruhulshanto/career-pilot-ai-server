@@ -5,6 +5,7 @@ import { requestLogger } from '@middlewares/request-logger.middleware.js';
 import { sanitizeBody } from '@middlewares/sanitize.middleware.js';
 import { securityMiddleware } from '@middlewares/security.middleware.js';
 import express from 'express';
+import cors from 'cors';
 
 import '@ai/prompts/interview.prompts.js';
 import '@ai/prompts/roadmap.prompts.js';
@@ -43,10 +44,7 @@ app.get('/status', async (_req, res) => {
   res.status(status.status === 'offline' ? 503 : 200).json(status);
 });
 
-app.use('/uploads/private', (_req, res) => {
-  res.status(404).json(apiErrorResponse('File not found'));
-});
-app.use('/uploads', express.static(path.resolve(env.UPLOADS_DIR)));
+app.use('/uploads', cors(), express.static(path.resolve(env.UPLOADS_DIR)));
 app.use(env.API_PREFIX, appRoutes);
 
 // 5. Error Handling

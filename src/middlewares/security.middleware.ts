@@ -37,13 +37,16 @@ export const securityMiddleware = [
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
+        imgSrc: ["'self'", 'data:', 'https:', 'http:', 'localhost:*', '127.0.0.1:*'],
         connectSrc: [
           "'self'",
-          'https://api.groq.com'
+          'https://api.groq.com',
+          'http://localhost:5000',
+          'http://127.0.0.1:5000'
         ]
       }
     },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
     xssFilter: true,
     noSniff: true,
     hidePoweredBy: true,

@@ -94,5 +94,6 @@ export const updateUserProfileSchema = z.object({
   mentorSpecialties: cleanStringArray(20),
   mentorExpertise: cleanStringArray(30),
   socialLinks: socialLinksSchema,
+  avatarUrl: urlOrEmpty,
   isPublicProfile: z.boolean().optional()
 });

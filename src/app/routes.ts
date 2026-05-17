@@ -13,6 +13,7 @@ import onboardingRoutes from '@modules/onboarding/routes/onboarding.routes.js';
 import resumesRoutes from '@modules/resumes/routes/resumes.routes.js';
 import roadmapRoutes from '@modules/roadmap/routes/roadmap.routes.js';
 import usersRoutes from '@modules/users/routes/users.routes.js';
+import supportRoutes from '@modules/support/routes/support.routes.js';
 import { systemHealthService } from '@/system/system-health.service.js';
 import { Router } from 'express';
 
@@ -56,6 +57,7 @@ router.use('/mentor', mentorRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/onboarding', onboardingRoutes);
+router.use('/support', supportRoutes);
 router.use('/admin', adminRoutes);
 
 export default router;

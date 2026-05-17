@@ -26,7 +26,7 @@ const profilePhotoStorage = multer.diskStorage({
 const upload = multer({
   storage: profilePhotoStorage,
   limits: {
-    fileSize: 2 * 1024 * 1024,
+    fileSize: 1 * 1024 * 1024,
     files: 1
   },
   fileFilter: (_req, file, cb) => {
