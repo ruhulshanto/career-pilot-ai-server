@@ -77,9 +77,7 @@ export const chatbotService = {
     const initialContext = ChatbotAiService.createInitialContext(
       payload.context?.userProfile
     );
-    initialContext.careerContext = (await careerContextService.getCareerContext(
-      userId
-    )) as unknown as Record<string, any>;
+    initialContext.careerContext = {};
 
     const session = await chatbotRepository.createSession({
       userId,
