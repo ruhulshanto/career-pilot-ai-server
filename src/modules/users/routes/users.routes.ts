@@ -14,9 +14,14 @@ import { Router } from 'express';
 import multer from 'multer';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { env } from '@config/env.js';
+
+const PROFILE_PHOTO_DIR = path.resolve(env.UPLOADS_DIR, 'profile-photos');
+mkdirSync(PROFILE_PHOTO_DIR, { recursive: true });
 
 const profilePhotoStorage = multer.diskStorage({
-  destination: 'uploads/profile-photos',
+  destination: PROFILE_PHOTO_DIR,
   filename: (_req, file, cb) => {
     const extension = path.extname(file.originalname).toLowerCase();
     cb(null, `${randomUUID()}${extension}`);

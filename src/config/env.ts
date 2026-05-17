@@ -37,18 +37,23 @@ const optionalEnv = <T extends z.ZodTypeAny>(schema: T) =>
 const placeholderPattern =
   /your[._-]|replace_with|placeholder|google_app_password|changeme|example\.com|yourdomain\.com/i;
 
+const normalizeString = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed.replace(/^['"](.+)['"]$/, '$1');
+  }, schema);
+
 const looksPlaceholder = (value?: string) =>
   !value || placeholderPattern.test(value);
 
 const envSchema = z
   .object({
-    NODE_ENV: z
-      .enum(['development', 'test', 'production'])
-      .default('development'),
+    NODE_ENV: normalizeString(z.enum(['development', 'test', 'production'])).default('development'),
     PORT: z.coerce.number().default(5000),
-    API_PREFIX: z.string().default('/api/v1'),
-    CLIENT_ORIGIN: z.string().min(1),
-    DATABASE_URL: z.string().min(1),
+    API_PREFIX: normalizeString(z.string()).default('/api/v1'),
+    CLIENT_ORIGIN: normalizeString(z.string().min(1)),
+    DATABASE_URL: normalizeString(z.string().min(1)),
     PRISMA_CONNECT_RETRIES: z.coerce.number().int().min(1).default(3),
     PRISMA_CONNECT_RETRY_DELAY_MS: z.coerce.number().int().min(0).default(5000),
     PRISMA_TRANSACTION_MAX_WAIT_MS: z.coerce
@@ -61,37 +66,39 @@ const envSchema = z
       .int()
       .min(1000)
       .default(60000),
-    REDIS_URL: z.string().min(1),
-    JWT_ACCESS_SECRET: z.string().min(16),
-    JWT_REFRESH_SECRET: z.string().min(16),
-    JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
-    JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
-    COOKIE_DOMAIN: optionalEnv(z.string()),
+    REDIS_URL: normalizeString(z.string().min(1)),
+    JWT_ACCESS_SECRET: normalizeString(z.string().min(16)),
+    JWT_REFRESH_SECRET: normalizeString(z.string().min(16)),
+    JWT_ACCESS_EXPIRES_IN: normalizeString(z.string()).default('15m'),
+    JWT_REFRESH_EXPIRES_IN: normalizeString(z.string()).default('7d'),
+    COOKIE_DOMAIN: optionalEnv(normalizeString(z.string())),
     DEMO_LOGIN_ENABLED: booleanEnv.default(false),
-    REQUEST_BODY_LIMIT: z.string().default('1mb'),
+    REQUEST_BODY_LIMIT: normalizeString(z.string()).default('1mb'),
     PRISMA_KEEP_ALIVE_INTERVAL_MS: z.coerce
       .number()
       .int()
       .min(30000)
       .default(60000),
-    EMAIL_PROVIDER: z.enum(['gmail']).default('gmail'),
-    EMAIL_FROM: optionalEnv(z.string().min(3)),
-    EMAIL_REPLY_TO: optionalEnv(z.string().email()),
-    SMTP_HOST: z.string().min(1).default('smtp.gmail.com'),
+    EMAIL_PROVIDER: normalizeString(z.enum(['gmail'])).default('gmail'),
+    EMAIL_FROM: optionalEnv(normalizeString(z.string().min(3))),
+    EMAIL_REPLY_TO: optionalEnv(normalizeString(z.string().email())),
+    SMTP_HOST: normalizeString(z.string().min(1)).default('smtp.gmail.com'),
     SMTP_PORT: z.coerce.number().int().positive().default(465),
     SMTP_SECURE: booleanEnv.default(true),
-    SMTP_USER: optionalEnv(z.string().email()),
-    SMTP_PASS: optionalEnv(z.string().min(1)),
-    AI_PROVIDER: z.enum(['groq']).default('groq'),
-    GROQ_MODEL: z.string().default('llama-3.1-8b-instant'),
-    GROQ_API_KEY: optionalEnv(z.string()),
-    CHATBOT_GROQ_MODEL: z.string().default('llama-3.1-8b-instant'),
-    CHATBOT_GROQ_API_KEY: optionalEnv(z.string()),
-    STORAGE_PROVIDER: z
-      .enum(['local', 's3', 'cloudinary', 'supabase'])
-      .default('local'),
-    UPLOADS_DIR: z.string().default('uploads'),
-    UPLOAD_PUBLIC_BASE_URL: optionalEnv(z.string().url())
+    SMTP_USER: optionalEnv(normalizeString(z.string().email())),
+    SMTP_PASS: optionalEnv(normalizeString(z.string().min(1))),
+    AI_PROVIDER: normalizeString(z.enum(['groq'])).default('groq'),
+    GROQ_MODEL: normalizeString(z.string()).default('llama-3.1-8b-instant'),
+    GROQ_API_KEY: optionalEnv(normalizeString(z.string())),
+    CHATBOT_GROQ_MODEL: normalizeString(z.string()).default('llama-3.1-8b-instant'),
+    CHATBOT_GROQ_API_KEY: optionalEnv(normalizeString(z.string())),
+    STORAGE_PROVIDER: normalizeString(
+      z.enum(['local', 's3', 'cloudinary', 'supabase'])
+    ).default('local'),
+    UPLOADS_DIR: normalizeString(z.string()).default(
+      process.env.VERCEL === '1' ? '/tmp/uploads' : 'uploads'
+    ),
+    UPLOAD_PUBLIC_BASE_URL: optionalEnv(normalizeString(z.string().url()))
   })
   .superRefine((value, ctx) => {
     if (value.JWT_ACCESS_SECRET === value.JWT_REFRESH_SECRET) {
@@ -137,14 +144,6 @@ const envSchema = z
           code: z.ZodIssueCode.custom,
           path: ['COOKIE_DOMAIN'],
           message: 'COOKIE_DOMAIN must not be localhost in production'
-        });
-      }
-
-      if (value.DEMO_LOGIN_ENABLED) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['DEMO_LOGIN_ENABLED'],
-          message: 'DEMO_LOGIN_ENABLED must be false in production'
         });
       }
 

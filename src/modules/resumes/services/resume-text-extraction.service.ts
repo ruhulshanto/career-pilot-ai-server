@@ -1,8 +1,80 @@
-import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { env } from '@config/env.js';
+
+const ensurePdfJsPolyfills = () => {
+  const globalAny = globalThis as any;
+
+  if (!globalAny.DOMMatrix) {
+    globalAny.DOMMatrix = class DOMMatrix {
+      constructor(_init?: unknown) {}
+      multiply() {
+        return this;
+      }
+      inverse() {
+        return this;
+      }
+      translateSelf() {
+        return this;
+      }
+      scaleSelf() {
+        return this;
+      }
+      rotateSelf() {
+        return this;
+      }
+      multiplySelf() {
+        return this;
+      }
+      flipX() {
+        return this;
+      }
+      flipY() {
+        return this;
+      }
+      toString() {
+        return 'matrix(1,0,0,1,0,0)';
+      }
+    };
+  }
+
+  if (!globalAny.ImageData) {
+    globalAny.ImageData = class ImageData {
+      data: Uint8ClampedArray;
+      width: number;
+      height: number;
+
+      constructor(data: Uint8ClampedArray, width: number, height: number) {
+        this.data = data;
+        this.width = width;
+        this.height = height;
+      }
+    };
+  }
+
+  if (!globalAny.Path2D) {
+    globalAny.Path2D = class Path2D {
+      constructor(_path?: unknown) {}
+      addPath() {}
+      moveTo() {}
+      lineTo() {}
+      bezierCurveTo() {}
+      quadraticCurveTo() {}
+      arc() {}
+      arcTo() {}
+      ellipse() {}
+      rect() {}
+      closePath() {}
+    };
+  }
+};
+
+const loadPdfParse = async () => {
+  ensurePdfJsPolyfills();
+  const module = await import('pdf-parse');
+  return module.PDFParse;
+};
 
 export type ResumeSourceType = 'PDF' | 'DOCX' | 'TXT';
 
@@ -184,6 +256,7 @@ export const resumeTextExtractionService = {
     const fileBuffer = await readResumeBytes(input.filePath, input.fileSize);
 
     if (sourceType === 'PDF') {
+      const PDFParse = await loadPdfParse();
       const parser = new PDFParse({ data: new Uint8Array(fileBuffer) });
       try {
         const result = await parser.getText();

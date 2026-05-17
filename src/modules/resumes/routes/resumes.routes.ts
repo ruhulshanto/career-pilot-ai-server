@@ -24,7 +24,10 @@ import { uploadLimiter } from '@middlewares/rate-limit.middleware.js';
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'node:path';
+import { mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+
+mkdirSync(RESUME_PRIVATE_UPLOAD_DIR, { recursive: true });
 
 const upload = multer({
   storage: multer.diskStorage({

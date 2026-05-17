@@ -33,10 +33,8 @@ const resolveAlias = (specifier, fromFile) => {
 
 const rewriteFile = async (filePath) => {
   const source = await readFile(filePath, 'utf8');
-  const rewritten = source.replace(
-    /((?:from\s+|import\s*\(\s*)['"])(@(?:\/|config\/|modules\/|shared\/|middlewares\/|constants\/|ai\/|queues\/)[^'"]+)(['"])/g,
-    (_match, prefix, specifier, suffix) => `${prefix}${resolveAlias(specifier, filePath)}${suffix}`
-  );
+  const aliasRegex = /((?:from\s+|import\s*\(\s*|import\s+|export\s+(?:\*\s+)?from\s+))(['"])(@(?:\/|config\/|modules\/|shared\/|middlewares\/|constants\/|ai\/|queues\/)[^'"]+)(['"])/g;
+  const rewritten = source.replace(aliasRegex, (_match, prefix, quote, specifier, suffix) => `${prefix}${quote}${resolveAlias(specifier, filePath)}${suffix}`);
 
   if (rewritten !== source) {
     await writeFile(filePath, rewritten);

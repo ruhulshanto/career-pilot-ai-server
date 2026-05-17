@@ -2,13 +2,29 @@ import { env } from '@config/env.js';
 import { Redis } from 'ioredis';
 import { logger } from '@/logging/logger.js';
 
+const parseRedisUrl = (rawUrl: string) => {
+  const trimmed = rawUrl.trim();
+
+  if (trimmed.startsWith('redis-cli')) {
+    const match = trimmed.match(/-u\s+(['"]?)((?:redis|rediss|https?):\/\/[^'"\s]+)\1/);
+    if (match?.[2]) {
+      return match[2];
+    }
+  }
+
+  return trimmed;
+};
+
 let redisClient: Redis | undefined;
 let isRedisAvailable = true;
 let heartbeatInterval: NodeJS.Timeout | undefined;
 
 export const getRedis = () => {
   if (!redisClient) {
-    redisClient = new Redis(env.REDIS_URL, {
+    const redisUrl = parseRedisUrl(env.REDIS_URL);
+    const isUpstash = redisUrl.includes('upstash.io');
+    redisClient = new Redis(redisUrl, {
+      tls: isUpstash && redisUrl.startsWith('redis://') ? {} : undefined,
       maxRetriesPerRequest: null,
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);
