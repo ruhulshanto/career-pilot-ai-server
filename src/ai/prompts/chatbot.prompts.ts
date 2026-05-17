@@ -86,12 +86,26 @@ promptManager.register({
 promptManager.register({
   id: 'chatbot-title',
   name: 'Chatbot Session Title Generator',
-  description: 'Generate a highly relevant, extremely concise title (under 20 chars) for a session based on the first message.',
+  description: 'Semantically summarize the user message into a 2-4 word professional conversation title under 20 characters.',
   template:
-    `Analyze this user's first message in a career consultation chat and generate a highly relevant, extremely professional, concise title for the conversation. The title MUST be strictly 1 to 20 characters in total length (including spaces). Do not use quotes, generic words like "Chat", "Consultation", "Session", "My", "First", "Help", or punctuation.\n\n` +
+    `Your job is to generate a short, professional conversation title based on the user's message.\n\n` +
+    `RULES:\n` +
+    `- Title must be 2 to 4 words ONLY\n` +
+    `- Title must be UNDER 20 characters INCLUDING spaces\n` +
+    `- Capture the TOPIC/INTENT, do NOT copy raw words from the message\n` +
+    `- Title must be human-readable and meaningful\n` +
+    `- NEVER cut words in half\n` +
+    `- NEVER use quotes, punctuation, or these words: Chat, Consultation, Session, My, First, Help, New\n\n` +
+    `EXAMPLES:\n` +
+    `Message: "how can i build a resume?" -> Title: "Resume Building"\n` +
+    `Message: "help me prepare for frontend interview" -> Title: "Frontend Interview"\n` +
+    `Message: "how to switch career into ui ux design" -> Title: "UX Career Shift"\n` +
+    `Message: "write react developer portfolio" -> Title: "React Portfolio"\n` +
+    `Message: "what skills do i need for data science" -> Title: "Data Science Skills"\n` +
+    `Message: "how do i negotiate salary offer" -> Title: "Salary Negotiation"\n\n` +
     `User message: ${'${userMessage}'}\n\n` +
-    `Return JSON with: {"title": "..."}`,
+    `Return ONLY valid JSON: {"title": "..."}`,
   variables: ['userMessage'],
   model: defaultChatbotModel,
-  systemMessage: 'Generate an extremely concise conversation title under 20 characters in valid JSON format.'
+  systemMessage: 'You generate extremely concise 2-4 word career conversation titles under 20 characters. Return valid JSON only.'
 });

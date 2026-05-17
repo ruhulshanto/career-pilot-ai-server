@@ -125,7 +125,7 @@ export const chatbotService = {
     });
 
     // Auto-generate topic title if using a default title
-    const isDefaultTitle = /^(New Consultation|Chat Session)/.test(session.title);
+    const isDefaultTitle = /^(New Consultation|Chat Session)/.test(session.title ?? '');
     if (isDefaultTitle) {
       try {
         const aiService = new ChatbotAiService();

@@ -494,28 +494,75 @@ Guidelines:
   }
 
   /**
-   * Generate a concise 2-4 word title for the session based on the first message
+   * Generate a semantic 2-4 word professional title for the session
+   * based on the first message. Title is always under 20 characters.
    */
   async generateTitle(userMessage: string): Promise<string> {
     try {
       const response = await this.executePromptWithSchema(
         'chatbot-title',
-        { userMessage },
+        { userMessage: userMessage.slice(0, 300) },
         z.object({
           title: z.string()
         }),
-        { schemaRetries: 1 }
+        { schemaRetries: 2 }
       );
 
-      let cleanTitle = (response.title || '').trim().replace(/['"“”]/g, '');
-      if (cleanTitle.length > 20) {
-        cleanTitle = cleanTitle.slice(0, 20).trim();
+      // Strip quotes and trim
+      let title = (response.title || '').replace(/['"""]/g, '').trim();
+
+      // If AI respected the limit, return it directly
+      if (title.length > 0 && title.length <= 20) {
+        return title;
       }
-      return cleanTitle || 'Career Guidance';
+
+      // If AI returned something too long, trim at the last full word before 20 chars
+      if (title.length > 20) {
+        const trimmed = title.slice(0, 20);
+        const lastSpace = trimmed.lastIndexOf(' ');
+        title = lastSpace > 0 ? trimmed.slice(0, lastSpace).trim() : trimmed.trim();
+        if (title.length > 0) return title;
+      }
+
+      // Fallback: derive from the message itself (word-boundary, not char-slice)
+      return this.deriveFallbackTitle(userMessage);
     } catch (error) {
       logger.error({ error }, 'Failed to generate conversation title');
-      return 'Career Consultation';
+      return this.deriveFallbackTitle(userMessage);
     }
+  }
+
+  /**
+   * Derive a clean fallback title from a raw user message using key words
+   * – always stays under 20 characters, never cuts a word in half.
+   */
+  private deriveFallbackTitle(userMessage: string): string {
+    // Strip filler words and pick the first 2-3 meaningful words
+    const fillers = new Set([
+      'a','an','the','i','my','me','can','do','how','to','for','of',
+      'in','is','it','at','be','on','with','and','or','what','when',
+      'will','help','please','want','need','should','could','would'
+    ]);
+    const words = userMessage
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 1 && !fillers.has(w));
+
+    let result = '';
+    for (const word of words) {
+      const candidate = result ? `${result} ${word}` : word;
+      if (candidate.length > 20) break;
+      result = candidate;
+    }
+
+    if (!result) return 'Career Guidance';
+
+    // Title-case it
+    return result
+      .split(' ')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
   }
 
   /**
