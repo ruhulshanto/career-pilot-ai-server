@@ -3,6 +3,7 @@ import { authenticate, authorize } from '@middlewares/auth.middleware.js';
 import {
   getAdminDashboard,
   getAdminSystem,
+  getAdminUsers,
   retryFailedQueueJobs
 } from '@modules/admin/controllers/admin.controller.js';
 
@@ -12,6 +13,7 @@ router.use(authenticate, authorize('ADMIN'));
 
 router.get('/dashboard', getAdminDashboard);
 router.get('/system', getAdminSystem);
+router.get('/users', getAdminUsers);
 router.post('/system/queues/:queueName/retry-failed', retryFailedQueueJobs);
 
 router.get('/security/health', (_req, res) => {

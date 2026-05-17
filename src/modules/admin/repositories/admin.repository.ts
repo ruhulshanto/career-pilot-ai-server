@@ -167,6 +167,79 @@ export const adminRepository = {
     });
   },
 
+  async getUsers(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    role?: string;
+    status?: string; // 'active', 'unverified', 'suspended', 'deleted'
+  }) {
+    const { page, limit, search, role, status } = params;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { username: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    if (role) {
+      where.role = role;
+    }
+
+    if (status) {
+      switch (status) {
+        case 'active':
+          where.deletedAt = null;
+          where.suspendedAt = null; // Assuming we might add suspendedAt later, or just check deletedAt
+          break;
+        case 'deleted':
+          where.deletedAt = { not: null };
+          break;
+        case 'unverified':
+          where.emailVerifiedAt = null;
+          where.deletedAt = null;
+          break;
+        default:
+          where.deletedAt = null;
+          break;
+      }
+    } else {
+      // By default, exclude deleted users unless status is explicitly requested
+      where.deletedAt = null;
+    }
+
+    const [total, users] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          firstName: true,
+          lastName: true,
+          avatarUrl: true,
+          role: true,
+          emailVerifiedAt: true,
+          lastLoginAt: true,
+          createdAt: true,
+          deletedAt: true
+        }
+      })
+    ]);
+
+    return { total, users, page, limit };
+  },
+
   async getRecentFailures() {
     return prisma.aiFeedback.findMany({
       where: { status: ProcessingStatus.FAILED },

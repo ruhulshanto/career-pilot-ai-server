@@ -54,6 +54,10 @@ export const adminService = {
     return systemHealthService.getSystemStatus({ includeDetails: true });
   },
 
+  async getUsers(params: { page: number; limit: number; search?: string; role?: string; status?: string }) {
+    return adminRepository.getUsers(params);
+  },
+
   async retryFailedJobs(queueName: QueueName, limit?: number) {
     return systemHealthService.retryFailedJobs(queueName, limit);
   }

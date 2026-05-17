@@ -24,6 +24,28 @@ export const getAdminSystem = asyncHandler(
   }
 );
 
+export const getAdminUsers = asyncHandler(
+  async (req: Request, res: Response) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const search = req.query.search as string;
+    const role = req.query.role as string;
+    const status = req.query.status as string;
+
+    const result = await adminService.getUsers({
+      page,
+      limit: Math.min(limit, 50),
+      search,
+      role,
+      status
+    });
+
+    res
+      .status(StatusCodes.OK)
+      .json(apiResponse('Admin users fetched successfully', result));
+  }
+);
+
 export const retryFailedQueueJobs = asyncHandler(
   async (req: Request, res: Response) => {
     const result = await adminService.retryFailedJobs(
