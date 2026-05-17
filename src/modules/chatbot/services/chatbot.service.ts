@@ -124,6 +124,20 @@ export const chatbotService = {
       content: payload.content
     });
 
+    // Auto-generate topic title if using a default title
+    const isDefaultTitle = /^(New Consultation|Chat Session)/.test(session.title);
+    if (isDefaultTitle) {
+      try {
+        const aiService = new ChatbotAiService();
+        const generatedTitle = await aiService.generateTitle(payload.content);
+        if (generatedTitle) {
+          await chatbotRepository.updateSessionTitle(sessionId, generatedTitle);
+        }
+      } catch (err) {
+        // Do not block message sending if title generation fails
+      }
+    }
+
     // Prepare context for AI
     const context =
       (session.context as unknown as ChatbotContext) ||

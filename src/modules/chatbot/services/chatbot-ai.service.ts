@@ -494,6 +494,28 @@ Guidelines:
   }
 
   /**
+   * Generate a concise 2-4 word title for the session based on the first message
+   */
+  async generateTitle(userMessage: string): Promise<string> {
+    try {
+      const response = await this.executePromptWithSchema(
+        'chatbot-title',
+        { userMessage },
+        z.object({
+          title: z.string()
+        }),
+        { schemaRetries: 1 }
+      );
+
+      const cleanTitle = (response.title || '').trim().replace(/['"“”]/g, '');
+      return cleanTitle || 'Career Consultation';
+    } catch (error) {
+      logger.error({ error }, 'Failed to generate conversation title');
+      return 'Career Consultation';
+    }
+  }
+
+  /**
    * Initialize new conversation context
    */
   static createInitialContext(userProfile?: any): ChatbotContext {

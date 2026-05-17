@@ -82,3 +82,16 @@ promptManager.register({
   model: defaultChatbotModel,
   systemMessage: 'Extract context in valid JSON format.'
 });
+
+promptManager.register({
+  id: 'chatbot-title',
+  name: 'Chatbot Session Title Generator',
+  description: 'Generate a highly relevant, extremely concise 2-4 word title for a career consultation session based on the first message.',
+  template:
+    `Analyze this user's first message in a career consultation chat and generate a highly relevant, extremely professional, concise 2-4 word title for the conversation. Do not use quotes, generic words like "Chat", "Consultation", "Session", "My", "First", "Help", or punctuation.\n\n` +
+    `User message: ${'${userMessage}'}\n\n` +
+    `Return JSON with: {"title": "..."}`,
+  variables: ['userMessage'],
+  model: defaultChatbotModel,
+  systemMessage: 'Generate an extremely concise 2-4 word conversation title in valid JSON format.'
+});
