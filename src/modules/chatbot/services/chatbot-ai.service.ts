@@ -507,8 +507,11 @@ Guidelines:
         { schemaRetries: 1 }
       );
 
-      const cleanTitle = (response.title || '').trim().replace(/['"“”]/g, '');
-      return cleanTitle || 'Career Consultation';
+      let cleanTitle = (response.title || '').trim().replace(/['"“”]/g, '');
+      if (cleanTitle.length > 20) {
+        cleanTitle = cleanTitle.slice(0, 20).trim();
+      }
+      return cleanTitle || 'Career Guidance';
     } catch (error) {
       logger.error({ error }, 'Failed to generate conversation title');
       return 'Career Consultation';

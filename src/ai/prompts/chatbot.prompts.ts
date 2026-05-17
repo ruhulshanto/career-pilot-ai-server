@@ -86,12 +86,12 @@ promptManager.register({
 promptManager.register({
   id: 'chatbot-title',
   name: 'Chatbot Session Title Generator',
-  description: 'Generate a highly relevant, extremely concise 2-4 word title for a career consultation session based on the first message.',
+  description: 'Generate a highly relevant, extremely concise title (under 20 chars) for a session based on the first message.',
   template:
-    `Analyze this user's first message in a career consultation chat and generate a highly relevant, extremely professional, concise 2-4 word title for the conversation. Do not use quotes, generic words like "Chat", "Consultation", "Session", "My", "First", "Help", or punctuation.\n\n` +
+    `Analyze this user's first message in a career consultation chat and generate a highly relevant, extremely professional, concise title for the conversation. The title MUST be strictly 1 to 20 characters in total length (including spaces). Do not use quotes, generic words like "Chat", "Consultation", "Session", "My", "First", "Help", or punctuation.\n\n` +
     `User message: ${'${userMessage}'}\n\n` +
     `Return JSON with: {"title": "..."}`,
   variables: ['userMessage'],
   model: defaultChatbotModel,
-  systemMessage: 'Generate an extremely concise 2-4 word conversation title in valid JSON format.'
+  systemMessage: 'Generate an extremely concise conversation title under 20 characters in valid JSON format.'
 });
